@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = 'setuptools.build_meta'
+
+[tool.setuptools.package-dir]
+"" = "py"
+
+[project]
+name = "adaptic"
+version = "0.0.1dev"
+authors = [
+    {name = "AI Universe Collaboration"}
+]
+description = "Adapting cosmology datasets for AI"
+readme = "README.md"
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+dependencies = [
+    "numpy",
+    "fitsio",
+    "torch"
+]
