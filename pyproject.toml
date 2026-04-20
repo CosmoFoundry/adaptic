@@ -7,7 +7,6 @@ build-backend = 'setuptools.build_meta'
 
 [project]
 name = "adaptic"
-version = "0.0.1"
 authors = [
     {name = "AI Universe Collaboration"}
 ]
@@ -20,3 +19,7 @@ dependencies = [
     "fitsio",
     "torch"
 ]
+dynamic = ["version"]
+
+[tool.setuptools.dynamic]
+version = {attr = "adaptic.__version__"}
