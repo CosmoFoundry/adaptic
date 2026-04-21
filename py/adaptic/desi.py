@@ -9,7 +9,7 @@ from copy import deepcopy
 class DESIDataset(IterableDataset):
     def __init__(self, specprod_dir, summary_table, seed=123, shuffle_files=True,
                  transform=None, normalize=False, train_frac=None, train_data=True,
-                 coadd_spectra=True):
+                 coadd_spectra=True, filter_func=None):
         """
             Initialize the dataset object.
 
@@ -70,7 +70,14 @@ class DESIDataset(IterableDataset):
                 Defaults to True, which does the coaddition. NOTE: Normalizing
                 is not currently supported when coadd_spectra is False.
 
-
+            filter_func : callable, optional
+                A filtering function that operates on the spectra FIBERMAP,
+                determining which spectra to return (or not). The filter
+                function should take in a numpy rec array (the fibermap) and
+                return a boolean array of items to return. For example,
+                filter could be a function that checks DESITARGET and only
+                returns science spectra. Defaults to None, which returns
+                all spectra in every file.
         """
         super(DESIDataset).__init__()
         self.base_dir = Path(specprod_dir)
@@ -84,6 +91,8 @@ class DESIDataset(IterableDataset):
         # Nominally used for things like transforming to tensor,
         # So that the dataset object can handle all the transforms on the fly.
         self.transform = transform
+
+        self.filter_func = filter_func
 
         wmin, wmax, wdelta = 3600, 9824, 0.8
         self.desi_wave = np.round(np.arange(wmin, wmax + wdelta, wdelta), 1)
@@ -124,7 +133,7 @@ class DESIDataset(IterableDataset):
                             'REF_EPOCH',
                             # 'FA_TARGET',
                             # 'FA_TYPE',
-                            # 'OBJTYPE',
+                            'OBJTYPE',
                             # 'SUBPRIORITY',
                             # 'OBSCONDITIONS',
                             # 'RELEASE',
@@ -254,13 +263,24 @@ class DESIDataset(IterableDataset):
             # Reading the header should be fast, so this shouldn't be a problem.
             nspec = h_coadd["FIBERMAP"].read_header()["NAXIS2"]
 
+            fmap = h_coadd["FIBERMAP"].read(columns=self._return_cols[:-5]) # The last 5 columns are from the redrock file.
+            self._details = fmap
+
+            if self.filter_func is not None:
+                keep_spec = self.filter_func(fmap)
+            else:
+                keep_spec = np.ones(nspec, dtype=bool)
+
+            nkeep = np.sum(keep_spec)
+            self._details = self._details[keep_spec] # Don't forget to trim the fibermap.
+
             # If we don't coadd we'll store dictionary of the individual cameras.
             if self.coadd_spectra:
-                flux = np.zeros((nspec, len(self.desi_wave)), dtype=np.float32)
+                flux = np.zeros((nkeep, len(self.desi_wave)), dtype=np.float32)
                 ivar = np.zeros_like(flux, dtype=np.float32)
                 mask = np.zeros_like(flux, dtype=np.int32)
             else:
-                flux = {c: np.zeros((nspec, len(self.desi_wave[self.cam_slice[c]])), dtype=np.float32) for c in self.cam_slice.keys()}
+                flux = {c: np.zeros((nkeep, len(self.desi_wave[self.cam_slice[c]])), dtype=np.float32) for c in self.cam_slice.keys()}
                 ivar = {c: np.zeros_like(flux[c], dtype=np.float32) for c in self.cam_slice.keys()}
                 mask = {c: np.zeros_like(flux[c], dtype=np.int32) for c in self.cam_slice.keys()}
 
@@ -268,11 +288,9 @@ class DESIDataset(IterableDataset):
             # Fast ish coadd cameras because we're going to exploit
             # the fact that we already know what overlaps what.
             for c in self.cam_slice.keys():
-                fl = h_coadd[f"{c}_FLUX"].read()
-                iv = h_coadd[f"{c}_IVAR"].read()
-
-
-                m = h_coadd[f"{c}_MASK"].read()
+                fl = h_coadd[f"{c}_FLUX"].read()[keep_spec, :]
+                iv = h_coadd[f"{c}_IVAR"].read()[keep_spec, :]
+                m = h_coadd[f"{c}_MASK"].read()[keep_spec, :]
 
                 # Extremely basic ivar weighted coadd
                 if self.coadd_spectra:
@@ -317,9 +335,6 @@ class DESIDataset(IterableDataset):
                     self._sigma = self._sigma[~dont_return]
                 else: # Don't forget to divide out the ivar when not normalizing
                     flux[nz] /= ivar[nz]
-
-            # flux *= (ivar != 0) # Masked pixels -> 0
-
             # Store data in the object
             self._flux = flux
             self._ivar = ivar
@@ -333,14 +348,11 @@ class DESIDataset(IterableDataset):
                 self._mask = mask > 0
             else:
                 self._mask = mask
-
-            fmap = h_coadd["FIBERMAP"].read(columns=self._return_cols[:-5]) # The last 5 columns are from the redrock file.
-            self._details = fmap
         with fitsio.FITS(fnames[1]) as h_rr:
             # We don't need to load all the columns, especially not COEFF which is quite large.
             rr_cols = self._return_cols[-5:]
-            rr_map = h_rr["REDSHIFTS"].read(columns=rr_cols)
-        self._details = merge_arrays([fmap, rr_map], asrecarray=True, flatten=True)
+            rr_map = h_rr["REDSHIFTS"].read(columns=rr_cols)[keep_spec]
+        self._details = merge_arrays([self._details, rr_map], asrecarray=True, flatten=True)
 
         if self.normalize:
             self._details = self._details[~dont_return]
