@@ -264,7 +264,14 @@ class DESIDataset(IterableDataset):
             nspec = h_coadd["FIBERMAP"].read_header()["NAXIS2"]
 
             fmap = h_coadd["FIBERMAP"].read(columns=self._return_cols[:-5]) # The last 5 columns are from the redrock file.
-            self._details = fmap
+
+            with fitsio.FITS(fnames[1]) as h_rr:
+                # We don't need to load all the columns, especially not COEFF which is quite large.
+                rr_cols = self._return_cols[-5:]
+                rr_map = h_rr["REDSHIFTS"].read(columns=rr_cols)
+            self._details = merge_arrays([fmap, rr_map], asrecarray=True, flatten=True)
+
+            # self._details = fmap
 
             if self.filter_func is not None:
                 keep_spec = self.filter_func(fmap)
@@ -272,7 +279,7 @@ class DESIDataset(IterableDataset):
                 keep_spec = np.ones(nspec, dtype=bool)
 
             nkeep = np.sum(keep_spec)
-            self._details = self._details[keep_spec] # Don't forget to trim the fibermap.
+            self._details = self._details[keep_spec] # Don't forget to trim the details.
 
             # If we don't coadd we'll store dictionary of the individual cameras.
             if self.coadd_spectra:
@@ -348,11 +355,6 @@ class DESIDataset(IterableDataset):
                 self._mask = mask > 0
             else:
                 self._mask = mask
-        with fitsio.FITS(fnames[1]) as h_rr:
-            # We don't need to load all the columns, especially not COEFF which is quite large.
-            rr_cols = self._return_cols[-5:]
-            rr_map = h_rr["REDSHIFTS"].read(columns=rr_cols)[keep_spec]
-        self._details = merge_arrays([self._details, rr_map], asrecarray=True, flatten=True)
 
         if self.normalize:
             self._details = self._details[~dont_return]
