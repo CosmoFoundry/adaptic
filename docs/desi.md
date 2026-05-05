@@ -151,14 +151,37 @@ valid_dl = iter(DataLoader(dataset_valid, batch_size=batchsize, num_workers=8))
 We will instantite our autoencoder and use the Adam optimizer, makign sure to move our model to the GPU. Then we train:
 
 ```python
+
+class DESIEncoder(nn.Module):
+    def __init__(self):
+        super(DESIEncoder, self).__init__()
+        self.unit = nn.Linear
+        self.encode = nn.Sequential(
+            self.unit(7781, 5096),
+            nn.ReLU(),
+            self.unit(5096, 2048),
+        )
+        self.decode = nn.Sequential(
+            self.unit(2048, 5096),
+            nn.ReLU(),
+            self.unit(5096, 7781)
+        )
+
+
+    def forward(self, x):
+        x = self.encode(x)
+        x = self.decode(x)
+
+        return x
+
 model = DESIEncoder()
 model.cuda()
 loss_fn = torch.nn.MSELoss()
 opt = torch.optim.Adam(model.parameters(), lr=0.0001)
 
 
-# curr_loss and curr_valid track a 5 epoch average
-# of the loss.
+# curr_loss and curr_valid track a 5 epoch
+# average of the loss.
 curr_loss = 0
 curr_valid = 0
 all_loss = []
