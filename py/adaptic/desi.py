@@ -7,7 +7,7 @@ from pathlib import Path
 from copy import deepcopy
 
 class DESIDataset(IterableDataset):
-    def __init__(self, specprod_dir, summary_table, seed=123, shuffle_files=True,
+    def __init__(self, specprod_dir, summary_table=None, seed=123, shuffle_files=True,
                  transform=None, normalize=False, train_frac=None, train_data=True,
                  coadd_spectra=True, filter_func=None):
         """
@@ -21,11 +21,13 @@ class DESIDataset(IterableDataset):
                 That is, the healpix coadded spectra are stored in
                 {specprod_dir}/healpix/{survey}/{program}/{healpix // 100}/{healpix}
 
-            summary_table : :class:`~numpy.array` or :class:`~astropy.table.Table`
+            summary_table : :class:`~numpy.array` or :class:`~astropy.table.Table`, optional
                 A numpy record array, or alternatively, an astropy table if
                 installed. At minimum needs to include the columns ["SURVEY", "PROGRAM",
                 "HEALPIX", "NSIDE", "NUMTARGETS"], although can contain additional
-                columns that will be ignored.
+                columns that will be ignored. Optional, if not passed the Dataset
+                will attempt to auto-discover the necessary file in the given `specprod_dir`.
+                If passed, override any auto-discovery.
 
             seed : int, optional
                 Seed to use for any randomness. Randomness is done through a
@@ -81,7 +83,17 @@ class DESIDataset(IterableDataset):
         """
         super(DESIDataset).__init__()
         self.base_dir = Path(specprod_dir)
-        self.summary = deepcopy(summary_table) # Don't want to mutate the input
+
+        if summary_table is not None:
+            self.summary = deepcopy(summary_table) # Don't want to mutate the input
+        else:
+            # Try auto discover a healpix summary file.
+            specprod = self.base_dir.name
+            summary_loc = self.base_dir / f"healpix-{specprod}.fits"
+            assert summary_loc.exists(), f"attempted auto discovery of {summary_loc}, but file not found!"
+
+            with fitsio.FITS(summary_loc) as h:
+                self.summary = h[1].read()
 
         self.seed = seed
         self.rng = np.random.default_rng(seed)
