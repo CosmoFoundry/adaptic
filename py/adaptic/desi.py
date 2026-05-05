@@ -83,6 +83,7 @@ class DESIDataset(IterableDataset):
         self.base_dir = Path(specprod_dir)
         self.summary = deepcopy(summary_table) # Don't want to mutate the input
 
+        self.seed = seed
         self.rng = np.random.default_rng(seed)
 
         if shuffle_files:
@@ -309,8 +310,6 @@ class DESIDataset(IterableDataset):
                     ivar[c] = iv
                     mask[c] = m > 0
 
-
-            # TODO apply better normalization?
             nz = ivar != 0
             # We set these if we do any normalization, otherwise they remain at
             # 0 and 1. Leaving them at 0 and 1 means if we always return it, and the
@@ -381,3 +380,15 @@ class DESIDataset(IterableDataset):
                     self._ivar[c] = self._ivar[c][keep_idcs]
                     self._mask[c] = self._mask[c][keep_idcs]
 
+    def set_train(self):
+        self.is_train = True
+
+    def set_validation(self):
+        self.is_train = False
+
+    def __copy__(self):
+        return DESIDataset(specprod_dir=self.base_dir, summary_table=self.summary,
+                           seed=self.seed, shuffle_files=False, # If shuffle is true, we shuffled the table already. We don't want to shuffle it again.
+                           transform=self.transform, normalize=self.normalize,
+                           train_frac=self.train_frac, train_data=self.is_train,
+                           coadd_spectra=self.coadd_spectra, filter_func=self.filter_func)

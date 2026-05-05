@@ -47,12 +47,24 @@ dataset_train = DESIDataset(specprod_dir=specprod_dir, summary_table=data_table,
 dataset_valid = DESIDataset(specprod_dir=specprod_dir, summary_table=data_table, seed=91701, train_frac=train_frac, train_data=False)
 ```
 
+The DESIDataset also supports copying, an alternative and safer pattern to declare a training and validation dataset is to do
+```python
+from copy import copy
+specprod_dir = {dir here}
+data_table = {table here}
+train_frac = 0.7
+dataset_train = DESIDataset(specprod_dir=specprod_dir, summary_table=data_table, seed=91701, train_frac=train_frac, train_data=True)
+dataset_valid = copy(dataset_train)
+dataset_valid.set_validation()
+```
+
+
 Since the `DESIDataset` will only load spectra files included in `data_table`, an alternative way to generate a training and validation split is to create two mutually exlcusive summary tables, and define the training and validation set by which *entire* file is included in each:
 ```python
 dataset_train = DESIDataset(specprod_dir=specprod_dir, summary_table=training_table)
 dataset_valid = DESIDataset(specprod_dir=specprod_dir, summary_table=validation_table)
 ```
-
+However, note that in this case if a file exists in *both* the training and validation tables then it will be included in both datasets.
 ## Filtering Spectra
 The `DESIDataset` provides some functionality to subselect spectra based on some data model based criterion. This allows the subselection to be done upon loading, before batching, ensuring that every batch is the same size while also providing the benefit that the subselection is parallelized over files.
 
@@ -74,9 +86,9 @@ The following is a list of returned values for a single spectrum:
 
 | NAME               | TYPE           |
 | ------------------ | -------------- |
-| FLUX               | FLOAT32[7781]  |
-| IVAR               | FLOAT32[7781]  |
-| MASK               | BOOL[7781]     |
+| FLUX               | FLOAT32[7781]\*  |
+| IVAR               | FLOAT32[7781]\*  |
+| MASK               | BOOL[7781]\*     |
 | TARGETID           | INT64          |
 | COADD_FIBERSTATUS  | INT32          |
 | TARGET_RA          | FLOAT64        |
@@ -107,6 +119,8 @@ The following is a list of returned values for a single spectrum:
 | ZWARN              | INT64          |
 | SPECTYPE           | CHAR[6]        |
 | SUBTYPE            | CHAR[20]       |
+
+\* Only when `coadd_spectra = True`. If `coadd_spectra = False`, FLUX, IVAR and MASK are instead dictionaries with keys `B, R, Z` corresponding to each of the three wavelength arms of the DESI spectrograph.
 
 ## Minimum Viable Example
 This is a small example that uses the `DESIDataset` to train a small fully-connected autoencoder. First, we instantiate two datasets, one for training and one for validation, using the public dr1 data:
