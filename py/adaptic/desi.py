@@ -269,7 +269,7 @@ class DESIDataset(IterableDataset):
 
     def _standardize_summary(self):
         """Auto detect tiles-based vs. healpix-based summary table and update columns as needed.
-        Modifies self.summary in-place. Should be called only by DESIDataSet constructor.
+        Modifies self.summary in-place. Should be called only by DESIDataset constructor.
         """
         # Confirm either HEALPIX or TILEID
         if 'HEALPIX' in self.summary.dtype.names:
