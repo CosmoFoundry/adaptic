@@ -1,6 +1,7 @@
+import os
 import fitsio
 import numpy as np
-from numpy.lib.recfunctions import merge_arrays # To join the fibermap and redshifts headers
+from numpy.lib.recfunctions import merge_arrays, append_fields # To join the fibermap and redshifts headers
 from torch.utils.data import IterableDataset, get_worker_info
 
 from pathlib import Path
@@ -85,7 +86,7 @@ class DESIDataset(IterableDataset):
         self.base_dir = Path(specprod_dir)
 
         if summary_table is not None:
-            self.summary = deepcopy(summary_table) # Don't want to mutate the input
+            self.summary = deepcopy(np.asarray(summary_table)) # Don't want to mutate the input
         else:
             # Try auto discover a healpix summary file.
             specprod = self.base_dir.name
@@ -97,6 +98,9 @@ class DESIDataset(IterableDataset):
 
         self.seed = seed
         self.rng = np.random.default_rng(seed)
+
+        self._standardize_summary()
+        self._known_missing_files = set()
 
         if shuffle_files:
             self.rng.shuffle(self.summary)
@@ -228,47 +232,121 @@ class DESIDataset(IterableDataset):
 
         # Loop forver.
         j = 0
+        num_reads = 0
         while True:
             row = self.summary[this_ids][j]
             # print(f"{worker_info.id}, {row}")  # Left for debugging.
-            self.load_and_coadd(self._filenames_from_row(row))
+            filenames = self._filenames_from_row(row)
+            if filenames is not None:    # could be None if files don't exist
+                num_reads += 1
+                self.load_and_coadd(filenames)
 
-            for i in range(self._details.shape[0]):
-                # Parse the example as a dictionary
-                example = {k: self._details[k][i] for k in self._return_cols}
-                example["MU"] = self._mu[i]
-                example["SIGMA"] = self._sigma[i]
-                if self.coadd_spectra:
-                    example["FLUX"] = self._flux[i, :]
-                    example["IVAR"] = self._ivar[i, :]
-                    example["MASK"] = self._mask[i, :]
-                else:
-                    example["FLUX"] = {c: self._flux[c][i, :] for c in self._flux}
-                    example["IVAR"] = {c: self._ivar[c][i, :] for c in self._ivar}
-                    example["MASK"] = {c: self._mask[c][i, :] for c in self._mask}
-
-                if self.transform:
+                for i in range(self._details.shape[0]):
+                    # Parse the example as a dictionary
+                    example = {k: self._details[k][i] for k in self._return_cols}
+                    example["MU"] = self._mu[i]
+                    example["SIGMA"] = self._sigma[i]
                     if self.coadd_spectra:
-                        example["FLUX"] = self.transform(example["FLUX"])
+                        example["FLUX"] = self._flux[i, :]
+                        example["IVAR"] = self._ivar[i, :]
+                        example["MASK"] = self._mask[i, :]
                     else:
-                        for c in self._flux.keys():
-                            example["FLUX"][c] = self.transform(example["FLUX"][c])
+                        example["FLUX"] = {c: self._flux[c][i, :] for c in self._flux}
+                        example["IVAR"] = {c: self._ivar[c][i, :] for c in self._ivar}
+                        example["MASK"] = {c: self._mask[c][i, :] for c in self._mask}
 
-                yield np.int64(example["TARGETID"]), example
+                    if self.transform:
+                        if self.coadd_spectra:
+                            example["FLUX"] = self.transform(example["FLUX"])
+                        else:
+                            for c in self._flux.keys():
+                                example["FLUX"][c] = self.transform(example["FLUX"][c])
+
+                    yield np.int64(example["TARGETID"]), example
 
             # Loop back to the start of the files at the end.
-            j +=1
+            j += 1
             if j == len(self.summary[this_ids]):
                 j = 0
+                if num_reads == 0:
+                    # something went wrong; looped through all options without finding anything to read
+                    raise RuntimeError("Looped through files without finding any to read! Check that the summary table is correct and that the files exist.")
+
+
+    def _standardize_summary(self):
+        """Auto detect tiles-based vs. healpix-based summary table and update columns as needed.
+        Modifies self.summary in-place. Should be called only by DESIDataset constructor.
+        """
+        # Confirm either HEALPIX or TILEID
+        if 'HEALPIX' in self.summary.dtype.names:
+            for col in ('SURVEY', 'PROGRAM'):
+                assert col in self.summary.dtype.names, f'{col} missing from HEALPIX-based summary table'
+        elif 'TILEID' in self.summary.dtype.names:
+            for col in ('LASTNIGHT',):
+                assert col in self.summary.dtype.names, f'{col} missing from TILEID-based summary table'
+        else:
+            raise ValueError(f"summary must have HEALPIX,SURVEY,PROGRAM or TILEID,LASTNIGHT columns; found {self.summary.dtype.names}")
+
+        # Trim to unique SURVEY, PROGRAM, HEALPIX if needed;
+        # tilepix.fits files map tiles:healpix and have multiple entries per healpix
+        # Note: this section can be removed if we standardize on a different healpix summary
+        #       file for each production
+        if 'HEALPIX' in self.summary.dtype.names:
+            ii = np.unique(self.summary[['SURVEY', 'PROGRAM', 'HEALPIX']], return_index=True)[1]
+            self.summary = self.summary[ii]
+
+        # Add default NUMTARGETS if needed; load-balancing may be off, but at least don't crash
+        if 'NUMTARGETS' not in self.summary.dtype.names:
+            numtargets = 500*np.ones(len(self.summary))
+            self.summary = append_fields(self.summary, 'NUMTARGETS', numtargets, usemask=False)
+
+        # promote bytestring SURVEY, PROGRAM columns to unicode columns
+        description = self.summary.dtype.descr
+        change_dtype = False
+        for i, (name, dtype) in enumerate(description):
+            if name in ('SURVEY', 'PROGRAM') and 'S' in dtype:
+                change_dtype = True
+                description[i] = (name, dtype.replace('S', 'U'))
+
+        if change_dtype:
+            self.summary = self.summary.astype(np.dtype(description))
+
+        # if tiles-based (not healpix), expand to one row per PETAL and add NUMTARGETS=500 column
+        if (('TILEID' in self.summary.dtype.names) and
+            ('HEALPIX' not in self.summary.dtype.names) and
+            ('PETAL' not in self.summary.dtype.names)
+            ):
+            summary = np.repeat(self.summary, 10)
+            petal = np.arange(len(summary)) % 10
+            self.summary = append_fields(summary, 'PETAL', petal, usemask=False)
+
 
     def _filenames_from_row(self, row):
-        hpx = row["HEALPIX"]
-        srvy = row["SURVEY"]
-        prgrm = row["PROGRAM"]
-        fname = self.base_dir / "healpix" / srvy / prgrm
-        fname = fname / str(hpx // 100) / str(hpx)
-        coaddname = fname / f"coadd-{srvy}-{prgrm}-{hpx}.fits"
-        rrname = fname / f"redrock-{srvy}-{prgrm}-{hpx}.fits"
+        if 'HEALPIX' in row.dtype.names:
+            hpx = row["HEALPIX"]
+            srvy = row["SURVEY"]
+            prgrm = row["PROGRAM"]
+            fname = self.base_dir / "healpix" / srvy / prgrm
+            fname = fname / str(hpx // 100) / str(hpx)
+            coaddname = fname / f"coadd-{srvy}-{prgrm}-{hpx}.fits"
+            rrname = fname / f"redrock-{srvy}-{prgrm}-{hpx}.fits"
+        elif 'TILEID' in row.dtype.names:
+            tileid = row['TILEID']
+            night = row['LASTNIGHT']
+            petal = row['PETAL']
+            dirname = self.base_dir / "tiles" / "cumulative" / str(tileid) / str(night)
+            coaddname = dirname / f"coadd-{petal}-{tileid}-thru{night}.fits"
+            rrname = dirname / f"redrock-{petal}-{tileid}-thru{night}.fits"
+            # check if files for this petal actually exist;
+            # assume redrock exists if coadd does to minimize I/O
+            if coaddname in self._known_missing_files:
+                return None
+            elif not os.path.isfile(coaddname):
+                self._known_missing_files.add(coaddname)
+                return None
+        else:
+            raise ValueError(f"row doesn't have HEALPIX or TILEID: {row=}")
+
         return [coaddname, rrname]
 
     def load_and_coadd(self, fnames):
