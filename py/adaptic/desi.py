@@ -100,6 +100,7 @@ class DESIDataset(IterableDataset):
         self.rng = np.random.default_rng(seed)
 
         self._standardize_summary()
+        self._known_missing_files = set()
 
         if shuffle_files:
             self.rng.shuffle(self.summary)
@@ -231,11 +232,13 @@ class DESIDataset(IterableDataset):
 
         # Loop forver.
         j = 0
+        num_reads = 0
         while True:
             row = self.summary[this_ids][j]
             # print(f"{worker_info.id}, {row}")  # Left for debugging.
             filenames = self._filenames_from_row(row)
             if filenames is not None:    # could be None if files don't exist
+                num_reads += 1
                 self.load_and_coadd(filenames)
 
                 for i in range(self._details.shape[0]):
@@ -265,6 +268,9 @@ class DESIDataset(IterableDataset):
             j += 1
             if j == len(self.summary[this_ids]):
                 j = 0
+                if num_reads == 0:
+                    # something went wrong; looped through all options without finding anything to read
+                    raise RuntimeError("Looped through files without finding any to read! Check that the summary table is correct and that the files exist.")
 
 
     def _standardize_summary(self):
@@ -278,6 +284,8 @@ class DESIDataset(IterableDataset):
         elif 'TILEID' in self.summary.dtype.names:
             for col in ('LASTNIGHT',):
                 assert col in self.summary.dtype.names, f'{col} missing from TILEID-based summary table'
+        else:
+            raise ValueError(f"summary must have HEALPIX,SURVEY,PROGRAM or TILEID,LASTNIGHT columns; found {self.summary.dtype.names}")
 
         # Trim to unique SURVEY, PROGRAM, HEALPIX if needed;
         # tilepix.fits files map tiles:healpix and have multiple entries per healpix
@@ -331,7 +339,10 @@ class DESIDataset(IterableDataset):
             rrname = dirname / f"redrock-{petal}-{tileid}-thru{night}.fits"
             # check if files for this petal actually exist;
             # assume redrock exists if coadd does to minimize I/O
-            if not os.path.isfile(coaddname):
+            if coaddname in self._known_missing_files:
+                return None
+            elif not os.path.isfile(coaddname):
+                self._known_missing_files.add(coaddname)
                 return None
         else:
             raise ValueError(f"row doesn't have HEALPIX or TILEID: {row=}")
