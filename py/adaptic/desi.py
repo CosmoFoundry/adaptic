@@ -331,6 +331,21 @@ class DESIDataset(IterableDataset):
 
 
     def _filenames_from_row(self, row):
+        """
+            Given the row of a summary table, determine the filenames of the associated
+            coadd and redrock output files. Should only be called internally by a DESIDataset.
+
+            Parameters
+            ----------
+            row : :class:`~numpy.array`
+                A single row of the summary table stored in this DESIDataset.
+
+            Returns
+            -------
+            list of :class:`~pathlib.Path`
+                List of determined path names. The first element is the coadd
+                path and the second is the redrock path.
+        """
         if 'HEALPIX' in row.dtype.names:
             hpx = row["HEALPIX"]
             srvy = row["SURVEY"]
@@ -359,6 +374,19 @@ class DESIDataset(IterableDataset):
         return [coaddname, rrname]
 
     def load_and_coadd(self, fnames):
+        """
+            Given the a list of filenames corresponding to the coadd and the
+            redrock files, load the spectra and their corresponding
+            details. Should only be called internally by the DESIDataset,
+            as most of the behaviour of loading is controlled
+            by internal parameters, and the loaded elements are stored
+            internally in the object instead of returned.
+
+            Parameters
+            ----------
+            fnames : list of :class:`~pathlib.Path`
+                A list of filenames to be loaded by this DESIDataset.
+        """
         with fitsio.FITS(fnames[0]) as h_coadd:
             # Reading the header should be fast, so this shouldn't be a problem.
             nspec = h_coadd["FIBERMAP"].read_header()["NAXIS2"]
@@ -480,9 +508,17 @@ class DESIDataset(IterableDataset):
                     self._mask[c] = self._mask[c][keep_idcs]
 
     def set_train(self):
+        """
+            Set this DESIDataset to training mode, and return the training
+            subset of each file.
+        """
         self.is_train = True
 
     def set_validation(self):
+        """
+            Set this DESIDataset to validation mode, and return the validation
+            subset of each file.
+        """
         self.is_train = False
 
     def __copy__(self):
