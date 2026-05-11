@@ -138,11 +138,11 @@ class DESIDataset(IterableDataset):
         self.normalize = normalize
         self.is_train = train_data
 
-        # TODO: think of a better way to handly not coadding things.
         self.coadd_spectra = coadd_spectra
 
         if train_frac is not None:
-            assert (train_frac >= 0) and (train_frac <= 1), "train_frac must be between 0 and 1!"
+            if (train_frac < 0) or (train_frac > 1):
+                raise ValueError("train_frac must be between 0 and 1!")
 
         self.train_frac = train_frac
 
