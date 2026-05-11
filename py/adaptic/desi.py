@@ -10,7 +10,7 @@ from copy import deepcopy
 class DESIDataset(IterableDataset):
     def __init__(self, specprod_dir, summary_table=None, seed=123, shuffle_files=True,
                  transform=None, normalize=False, train_frac=None, train_data=True,
-                 coadd_spectra=True, filter_func=None):
+                 coadd_spectra=True, filter_func=None, autoloop=False):
         """
             Initialize the dataset object.
 
@@ -81,6 +81,11 @@ class DESIDataset(IterableDataset):
                 filter could be a function that checks DESITARGET and only
                 returns science spectra. Defaults to None, which returns
                 all spectra in every file.
+
+            autoloop : bool, optional
+                If True, automatically reloop back to the start of the dataset
+                once all spectra are loaded and exhausted. Otherwise terminate
+                the iteration at the end of the dataset. Defaults to False.
         """
         super(DESIDataset).__init__()
         self.base_dir = Path(specprod_dir)
@@ -181,6 +186,8 @@ class DESIDataset(IterableDataset):
                             "SPECTYPE",
                             "SUBTYPE"]
 
+        self.autoloop = autoloop
+
     def __iter__(self):
         worker_info = get_worker_info()
 
@@ -266,11 +273,13 @@ class DESIDataset(IterableDataset):
 
             # Loop back to the start of the files at the end.
             j += 1
-            if j == len(self.summary[this_ids]):
+            if (j == len(self.summary[this_ids])):
                 j = 0
                 if num_reads == 0:
                     # something went wrong; looped through all options without finding anything to read
                     raise RuntimeError("Looped through files without finding any to read! Check that the summary table is correct and that the files exist.")
+                if not self.autoloop:
+                    break
 
 
     def _standardize_summary(self):
@@ -481,4 +490,5 @@ class DESIDataset(IterableDataset):
                            seed=self.seed, shuffle_files=False, # If shuffle is true, we shuffled the table already. We don't want to shuffle it again.
                            transform=self.transform, normalize=self.normalize,
                            train_frac=self.train_frac, train_data=self.is_train,
-                           coadd_spectra=self.coadd_spectra, filter_func=self.filter_func)
+                           coadd_spectra=self.coadd_spectra, filter_func=self.filter_func,
+                           autoloop=self.autoloop)
