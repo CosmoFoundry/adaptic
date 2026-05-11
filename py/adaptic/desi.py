@@ -246,7 +246,7 @@ class DESIDataset(IterableDataset):
             filenames = self._filenames_from_row(row)
             if filenames is not None:    # could be None if files don't exist
                 num_reads += 1
-                self.load_and_coadd(filenames)
+                self._load_and_coadd(filenames)
 
                 for i in range(self._details.shape[0]):
                     # Parse the example as a dictionary
@@ -373,7 +373,7 @@ class DESIDataset(IterableDataset):
 
         return [coaddname, rrname]
 
-    def load_and_coadd(self, fnames):
+    def _load_and_coadd(self, fnames):
         """
             Given the a list of filenames corresponding to the coadd and the
             redrock files, load the spectra and their corresponding
