@@ -10,7 +10,8 @@ from copy import deepcopy
 class DESIDataset(IterableDataset):
     def __init__(self, specprod_dir, summary_table=None, seed=123, shuffle_files=True,
                  transform=None, normalize=False, train_frac=None, train_data=True,
-                 coadd_spectra=True, filter_func=None, autoloop=False):
+                 coadd_spectra=True, filter_func=None, autoloop=False,
+                 extra_cols=None, return_cols=None):
         """
             Initialize the dataset object.
 
@@ -86,6 +87,18 @@ class DESIDataset(IterableDataset):
                 If True, automatically reloop back to the start of the dataset
                 once all spectra are loaded and exhausted. Otherwise terminate
                 the iteration at the end of the dataset. Defaults to False.
+
+            extra_cols : list of str, optional
+                Additional column names to include in each yielded example dict,
+                beyond the default set. Adaptic determines automatically whether
+                each column comes from FIBERMAP or REDSHIFTS. Cannot be used
+                together with return_cols.
+
+            return_cols : list of str, optional
+                Exact set of column names to include in each yielded example dict,
+                replacing the default set entirely. Adaptic determines automatically
+                whether each column comes from FIBERMAP or REDSHIFTS. Cannot be
+                used together with extra_cols.
         """
         super(DESIDataset).__init__()
         self.base_dir = Path(specprod_dir)
@@ -187,6 +200,13 @@ class DESIDataset(IterableDataset):
                             "SUBTYPE"]
 
         self.autoloop = autoloop
+
+        if return_cols is not None and extra_cols is not None:
+            raise ValueError("Specify at most one of extra_cols and return_cols, not both.")
+        if return_cols is not None:
+            self._return_cols = list(return_cols)
+        elif extra_cols is not None:
+            self._return_cols = self._return_cols + list(extra_cols)
 
     def __iter__(self):
         worker_info = get_worker_info()
@@ -391,13 +411,27 @@ class DESIDataset(IterableDataset):
             # Reading the header should be fast, so this shouldn't be a problem.
             nspec = h_coadd["FIBERMAP"].read_header()["NAXIS2"]
 
-            fmap = h_coadd["FIBERMAP"].read(columns=self._return_cols[:-5]) # The last 5 columns are from the redrock file.
-
             with fitsio.FITS(fnames[1]) as h_rr:
-                # We don't need to load all the columns, especially not COEFF which is quite large.
-                rr_cols = self._return_cols[-5:]
-                rr_map = h_rr["REDSHIFTS"].read(columns=rr_cols)
-            self._details = merge_arrays([fmap, rr_map], asrecarray=True, flatten=True)
+                fmap_available = set(h_coadd["FIBERMAP"].get_colnames())
+                rr_available   = set(h_rr["REDSHIFTS"].get_colnames())
+
+                fmap_read, rr_read = [], []
+                for col in self._return_cols:
+                    if col in fmap_available:
+                        fmap_read.append(col)
+                    elif col in rr_available:
+                        rr_read.append(col)
+                    else:
+                        raise ValueError(
+                            f"Column {col!r} not found in FIBERMAP of {fnames[0]} "
+                            f"or REDSHIFTS of {fnames[1]}"
+                        )
+
+                fmap   = h_coadd["FIBERMAP"].read(columns=fmap_read)
+                rr_map = h_rr["REDSHIFTS"].read(columns=rr_read) if rr_read else None
+
+            self._details = (merge_arrays([fmap, rr_map], asrecarray=True, flatten=True)
+                             if rr_map is not None else fmap)
 
             # self._details = fmap
 
@@ -523,8 +557,8 @@ class DESIDataset(IterableDataset):
 
     def __copy__(self):
         return DESIDataset(specprod_dir=self.base_dir, summary_table=self.summary,
-                           seed=self.seed, shuffle_files=False, # If shuffle is true, we shuffled the table already. We don't want to shuffle it again.
+                           seed=self.seed, shuffle_files=False, # If shuffle is true, we shuffled the table already. We don't want to reshape it again.
                            transform=self.transform, normalize=self.normalize,
                            train_frac=self.train_frac, train_data=self.is_train,
                            coadd_spectra=self.coadd_spectra, filter_func=self.filter_func,
-                           autoloop=self.autoloop)
+                           autoloop=self.autoloop, return_cols=self._return_cols)
