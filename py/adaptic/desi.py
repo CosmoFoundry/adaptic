@@ -559,7 +559,7 @@ class DESIDataset(IterableDataset):
 
     def __copy__(self):
         return DESIDataset(specprod_dir=self.base_dir, summary_table=self.summary,
-                           seed=self.seed, shuffle_files=False, # If shuffle is true, we shuffled the table already. We don't want to reshape it again.
+                           seed=self.seed, shuffle_files=False, # If shuffle is true, we shuffled the table already. We don't want to shuffle it again.
                            transform=self.transform, normalize=self.normalize,
                            train_frac=self.train_frac, train_data=self.is_train,
                            coadd_spectra=self.coadd_spectra, filter_func=self.filter_func,
