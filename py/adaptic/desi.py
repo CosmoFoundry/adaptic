@@ -204,6 +204,8 @@ class DESIDataset(IterableDataset):
         if return_cols is not None and extra_cols is not None:
             raise ValueError("Specify at most one of extra_cols and return_cols, not both.")
         if return_cols is not None:
+            if len(return_cols) == 0:
+                raise ValueError("return_cols cannot be an empty list.")
             self._return_cols = list(return_cols)
         elif extra_cols is not None:
             self._return_cols = self._return_cols + list(extra_cols)
