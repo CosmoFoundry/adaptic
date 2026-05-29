@@ -8,6 +8,40 @@ from pathlib import Path
 from copy import deepcopy
 
 class DESIDataset(IterableDataset):
+    # class-level tuple of default columns to return
+    DEFAULT_COLUMNS = (
+        'TARGETID',
+        'COADD_FIBERSTATUS',
+        'TARGET_RA',
+        'TARGET_DEC',
+        'PMRA',
+        'PMDEC',
+        'REF_EPOCH',
+        'OBJTYPE',
+        'EBV',
+        'FLUX_G',
+        'FLUX_R',
+        'FLUX_Z',
+        'FLUX_W1',
+        'FLUX_W2',
+        'FLUX_IVAR_G',
+        'FLUX_IVAR_R',
+        'FLUX_IVAR_Z',
+        'FLUX_IVAR_W1',
+        'FLUX_IVAR_W2',
+        'FIBERFLUX_G',
+        'FIBERFLUX_R',
+        'FIBERFLUX_Z',
+        'FIBERTOTFLUX_G',
+        'FIBERTOTFLUX_R',
+        'FIBERTOTFLUX_Z',
+        'Z',
+        'ZERR',
+        'ZWARN',
+        'SPECTYPE',
+        'SUBTYPE',
+        )
+
     def __init__(self, specprod_dir, summary_table=None, seed=123, shuffle_files=True,
                  transform=None, normalize=False, train_frac=None, train_data=True,
                  coadd_spectra=True, filter_func=None, autoloop=False,
@@ -159,56 +193,17 @@ class DESIDataset(IterableDataset):
 
         self.train_frac = train_frac
 
-        self._return_cols = ['TARGETID',
-                            'COADD_FIBERSTATUS',
-                            'TARGET_RA',
-                            'TARGET_DEC',
-                            'PMRA',
-                            'PMDEC',
-                            'REF_EPOCH',
-                            # 'FA_TARGET',
-                            # 'FA_TYPE',
-                            'OBJTYPE',
-                            # 'SUBPRIORITY',
-                            # 'OBSCONDITIONS',
-                            # 'RELEASE',
-                            # 'BRICKNAME',
-                            # 'BRICKID',
-                            # 'BRICK_OBJID',
-                            # 'MORPHTYPE',
-                            'EBV',
-                            'FLUX_G',
-                            'FLUX_R',
-                            'FLUX_Z',
-                            'FLUX_W1',
-                            'FLUX_W2',
-                            'FLUX_IVAR_G',
-                            'FLUX_IVAR_R',
-                            'FLUX_IVAR_Z',
-                            'FLUX_IVAR_W1',
-                            'FLUX_IVAR_W2',
-                            'FIBERFLUX_G',
-                            'FIBERFLUX_R',
-                            'FIBERFLUX_Z',
-                            'FIBERTOTFLUX_G',
-                            'FIBERTOTFLUX_R',
-                            'FIBERTOTFLUX_Z',
-                            "Z",
-                            "ZERR",
-                            "ZWARN",
-                            "SPECTYPE",
-                            "SUBTYPE"]
-
+        self._return_cols = self.DEFAULT_COLUMNS
         self.autoloop = autoloop
 
         if return_cols is not None and extra_cols is not None:
             raise ValueError("Specify at most one of extra_cols and return_cols, not both.")
         if return_cols is not None:
             if len(return_cols) == 0:
-                raise ValueError("return_cols cannot be an empty list.")
-            self._return_cols = list(return_cols)
+                raise ValueError("return_cols cannot be empty.")
+            self._return_cols = tuple(return_cols)
         elif extra_cols is not None:
-            self._return_cols = self._return_cols + list(extra_cols)
+            self._return_cols = self.DEFAULT_COLUMNS + tuple(extra_cols)
 
     def __iter__(self):
         worker_info = get_worker_info()
