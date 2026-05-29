@@ -205,6 +205,11 @@ class DESIDataset(IterableDataset):
         elif extra_cols is not None:
             self._return_cols = self.DEFAULT_COLUMNS + tuple(extra_cols)
 
+        # which columns are in FIBERMAP vs. REDSHIFTS HDUs
+        # will be auto-derived based on first file read
+        self._fibermap_cols = None
+        self._redshifts_cols = None
+
     def __iter__(self):
         worker_info = get_worker_info()
 
@@ -408,24 +413,30 @@ class DESIDataset(IterableDataset):
             # Reading the header should be fast, so this shouldn't be a problem.
             nspec = h_coadd["FIBERMAP"].read_header()["NAXIS2"]
 
-            with fitsio.FITS(fnames[1]) as h_rr:
+            if self._fibermap_cols is None:
+                self._fibermap_cols = []
                 fmap_available = set(h_coadd["FIBERMAP"].get_colnames())
-                rr_available   = set(h_rr["REDSHIFTS"].get_colnames())
-
-                fmap_read, rr_read = [], []
                 for col in self._return_cols:
                     if col in fmap_available:
-                        fmap_read.append(col)
-                    elif col in rr_available:
-                        rr_read.append(col)
-                    else:
-                        raise ValueError(
-                            f"Column {col!r} not found in FIBERMAP of {fnames[0]} "
-                            f"or REDSHIFTS of {fnames[1]}"
-                        )
+                        self._fibermap_cols.append(col)
 
-                fmap   = h_coadd["FIBERMAP"].read(columns=fmap_read)
-                rr_map = h_rr["REDSHIFTS"].read(columns=rr_read) if rr_read else None
+            with fitsio.FITS(fnames[1]) as h_rr:
+                if self._redshifts_cols is None:
+                    self._redshifts_cols = []
+                    rr_available   = set(h_rr["REDSHIFTS"].get_colnames())
+                    for col in self._return_cols:
+                        if col in self._fibermap_cols:
+                            pass  # already added from fibermap; don't add twice
+                        elif col in rr_available:
+                            self._redshifts_cols.append(col)
+                        else:
+                            raise ValueError(
+                                f"Column {col!r} not found in FIBERMAP of {fnames[0]} "
+                                f"or REDSHIFTS of {fnames[1]}"
+                            )
+
+                fmap   = h_coadd["FIBERMAP"].read(columns=self._fibermap_cols)
+                rr_map = h_rr["REDSHIFTS"].read(columns=self._redshifts_cols) if self._redshifts_cols else None
 
             self._details = (merge_arrays([fmap, rr_map], asrecarray=True, flatten=True)
                              if rr_map is not None else fmap)
