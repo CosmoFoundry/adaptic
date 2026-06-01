@@ -286,7 +286,7 @@ class DESIDataset(IterableDataset):
                             for c in self._flux.keys():
                                 example["FLUX"][c] = self.transform(example["FLUX"][c])
 
-                    yield np.int64(example["TARGETID"]), example
+                    yield example
 
             # Loop back to the start of the files at the end.
             j += 1
