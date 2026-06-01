@@ -192,7 +192,7 @@ i = 0
 while i < max_iter:
     model.train() # Ensure the model is in training mode to track gradients.
     data = next(train_dl)
-    tids, details = data
+    details = data
     fl = details["FLUX"].cuda()
     # Use the mask to mask out pixels when computing loss.
     mask = ~details["MASK"].cuda()
@@ -210,7 +210,7 @@ while i < max_iter:
     # Compute validation loss.
     model.eval()
     data_v = next(valid_dl)
-    tids, details_v = data_v
+    details_v = data_v
     fl_v = details_v["FLUX"].cuda()
     # Use the mask to mask out pixels when computing loss.
     mask_v = ~details_v["MASK"].cuda()
