@@ -209,9 +209,9 @@ class DESIDataset(IterableDataset):
         worker_info = get_worker_info()
 
         if worker_info is not None:
-            # IF worker info is not none there are multiple workers.
+            # If worker info is not none there are multiple workers.
             # If the length of the summary table is less than the number of workers
-            #  we have to handle that specially, so that every worker actually gets
+            # we have to handle that specially, so that every worker actually gets
             # files to load.
             num_workers = worker_info.num_workers
             worker_id = worker_info.id
@@ -246,10 +246,20 @@ class DESIDataset(IterableDataset):
                     ntargs_per_bin[add_bin] += row["NUMTARGETS"]
                     idcs_per_bin[add_bin].append(i)
 
+                # An array of indices that will *look* random but which, within
+                # each worker, are actually the indices corresponding to largest
+                # to smallest file size.
                 this_ids = np.array(idcs_per_bin[worker_id])
+
+                # We then reshuffle thise indices to regain randomness in file
+                # size and location.
                 # Interestingly since each worker has its own rng  with the same seed
                 # they'll shufflle their idcs in the same way, maintaining rough parity
                 # in file size across workers.
+                # TODO: consider if this is ok, and if not, change each workers seed based on its worker id
+                # TODO: consider if the user passes shuffle=False, do they have a specific ordering in mind, and if so, reorder to match that order across the workers?
+                self.rng.shuffle(this_ids)
+
         # If it's None we're in the main process so we can use the whole summary table for this process.
         else:
             this_ids = np.arange(len(self.summary))
