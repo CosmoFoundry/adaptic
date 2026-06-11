@@ -123,9 +123,9 @@ The following is a list of the default returned values for a single spectrum:
 
 \* Only when `coadd_spectra = True`. If `coadd_spectra = False`, FLUX, IVAR and MASK are instead dictionaries with keys `B, R, Z` corresponding to each of the three wavelength arms of the DESI spectrograph.
 
-The default keys are available as `DESIDataset.DEFAULT_COLUMNS`. Additional columns may be requested with the
+The default DESI header/metadata column keys are available as `DESIDataset.DEFAULT_COLUMNS` (in addition to the always-returned `FLUX`, `IVAR`, and `MASK` keys). Additional columns may be requested with the
 `extra_cols` constructor option, or the entire set can be replaced with the `return_cols` option.
-`DESIDataset` auto-derives whether these come from the coadd `FIBERMAP` HDU or the redrock `REDSHIFTS` HDU of the
+`DESIDataset` auto-derives whether these header/metadata columns come from the coadd `FIBERMAP` HDU or the redrock `REDSHIFTS` HDU of the
 input DESI FITS files.
 
 ## Minimum Viable Example
