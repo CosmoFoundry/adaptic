@@ -2,12 +2,12 @@ from pathlib import Path
 import tempfile
 import unittest
 
-import fitsio
-import numpy as np
-
 from .util import *
 from adaptic.desi import DESIDataset
 
+from torch.utils.data import DataLoader
+import fitsio
+import numpy as np
 
 class TestDESIDataset(unittest.TestCase):
     def setUp(self):
@@ -45,8 +45,11 @@ class TestDESIDataset(unittest.TestCase):
 
         # Additional returns that are not fibermap columns but are returned.
         self.spectra_set = set(["MU", "SIGMA", "FLUX", "IVAR", "MASK"])
+        self.batchsize = 13
 
     # We expect this one to fail with StopIteration.
+    # Normally you wouldn't iterate over it this way, you'd do, e.g., for
+    # item in dataset which would handle that StopIteration gracefully.
     @unittest.expectedFailure
     def test_dataset_stop_loop(self):
         dataset = DESIDataset(self.datadir, self.healpix_table, seed=self.seed)
@@ -54,7 +57,16 @@ class TestDESIDataset(unittest.TestCase):
         for _ in range(self.total_spec + 1):
             next(data_iter)
 
+    @unittest.expectedFailure
+    def test_dataset_stop_loop_dataloader(self):
+        dataset = DESIDataset(self.datadir, self.healpix_table, seed=self.seed)
+        train_dl = iter(DataLoader(dataset, batch_size=self.batchsize, num_workers=0))
+        for _ in range((self.total_spec // self.batchsize) + 2):
+            next(train_dl)
+
     def test_dataset_loop(self):
+        # This test tests autolooping, so shouldn't ever fail out when it runs out of data.
+
         # Generic initial
         dataset = DESIDataset(self.datadir, self.healpix_table, seed=self.seed, autoloop=True)
         data_iter = iter(dataset)
@@ -71,6 +83,22 @@ class TestDESIDataset(unittest.TestCase):
         # we don't care about order.
         expected = set(DESIDataset.DEFAULT_COLUMNS) | self.spectra_set
         self.assertEqual(set(data.keys()), expected)
+
+        # Test iterating with a DataLoader to batch in the main process
+        train_dl = iter(DataLoader(dataset, batch_size=self.batchsize, num_workers=0))
+        for _ in range((self.total_spec // self.batchsize) + 2):
+            next(train_dl)
+
+        # Test iterating with a DataLoader to batch with one subprocess
+        train_dl = iter(DataLoader(dataset, batch_size=self.batchsize, num_workers=1))
+        for _ in range((self.total_spec // self.batchsize) + 2):
+            next(train_dl)
+
+        # Test iterating with a DataLoader to batch with multiple subprocess
+        train_dl = iter(DataLoader(dataset, batch_size=self.batchsize, num_workers=4))
+        for _ in range((self.total_spec // self.batchsize) + 2):
+            next(train_dl)
+
 
     def tearDown(self):
         self.tempdir.cleanup()
