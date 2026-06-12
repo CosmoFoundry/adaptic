@@ -92,7 +92,7 @@ def random_desi_coadd(path, coadd_name, num_spec, rng, redshift_name=None):
                 h.write(data, extname=f"{cam}_{arr_type}")
 
     if redshift_name is not None:
-        with fitsio.FITS(path / coadd_name, "rw") as h:
+        with fitsio.FITS(path / redshift_name, "rw") as h:
             redshifts = random_structured_array(num_spec, rng, dtype=redshifts_dtype)
             redshifts["TARGETID"] = fmap["TARGETID"]
             h.write(redshifts, extname="REDSHIFTS")
