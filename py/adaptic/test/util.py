@@ -48,7 +48,7 @@ def random_structured_array(num_spec, rng, dtype):
 
     for col in dtype.names:
         # Store this so we don't have to keep accessing it
-        dt = arr[col].dtype
+        dt = dtype[col]
 
         # Single letter describing type
         # https://numpy.org/devdocs/reference/generated/numpy.dtype.kind.html
@@ -56,7 +56,10 @@ def random_structured_array(num_spec, rng, dtype):
         if kind in ["i", "u"]: # Integer
             arr[col] = rng.uniform(0, 256, size=num_spec)
         elif kind in ["f"]: # Float
-            arr[col] = rng.random(size=num_spec) * 256
+            if dt.shape != ():
+                arr[col] = rng.random(size=(num_spec, dt.shape)) * 256
+            else:
+                arr[col] = rng.random(size=num_spec) * 256
         elif kind in ["U", "S"]: # Strings
             U_idx = dt.str.index("U")
             # Find out how many characters this string is
