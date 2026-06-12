@@ -66,7 +66,7 @@ def random_structured_array(num_spec, rng, dtype):
             num_chars = int(dt.str[(U_idx + 1):])
 
             # Sample an array of num_spec by num_chars, sampling from all uppercase
-            # letters. Then we'll use a list comprehensino to concatenate the
+            # letters. Then we'll use a list comprehension to concatenate the
             # chars into single strings along that axis.
             strings = rng.choice(list(string.ascii_uppercase), size=(num_spec, num_chars))
             arr[col] = np.array(["".join(row) for row in strings], dtype=arr[col].dtype)
