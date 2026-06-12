@@ -88,16 +88,19 @@ class TestDESIDataset(unittest.TestCase):
         train_dl = iter(DataLoader(dataset, batch_size=self.batchsize, num_workers=0))
         for _ in range((self.total_spec // self.batchsize) + 2):
             next(train_dl)
+        del train_dl
 
         # Test iterating with a DataLoader to batch with one subprocess
         train_dl = iter(DataLoader(dataset, batch_size=self.batchsize, num_workers=1))
         for _ in range((self.total_spec // self.batchsize) + 2):
             next(train_dl)
+        del train_dl
 
         # Test iterating with a DataLoader to batch with multiple subprocess
         train_dl = iter(DataLoader(dataset, batch_size=self.batchsize, num_workers=4))
         for _ in range((self.total_spec // self.batchsize) + 2):
             next(train_dl)
+        del train_dl
 
 
     def tearDown(self):
