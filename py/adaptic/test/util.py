@@ -73,8 +73,12 @@ def random_structured_array(num_spec, rng, dtype):
 
     return arr
 
-def random_desi_coadd(path, coadd_name, num_spec, rng, redshift_name=None):
+def random_desi_coadd(path, coadd_name, num_spec, rng, redshift_name=None, targetid_start=0):
     fmap = random_structured_array(num_spec, rng, dtype=fibermap_dtype)
+
+    # We need these to be unique.
+    fmap["TARGETID"] = np.arange(len(fmap)) + targetid_start
+
     with fitsio.FITS(path / coadd_name, "rw") as h:
         h.write(fmap, extname="FIBERMAP")
 

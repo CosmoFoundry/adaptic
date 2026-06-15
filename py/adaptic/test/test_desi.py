@@ -25,6 +25,7 @@ class TestDESIDataset(unittest.TestCase):
             self.healpix_table = h[1].read()
 
         # Generate the dummy directories and files corresponding to this table
+        curr_tid = 0
         for row in self.healpix_table:
             hpx = row['HEALPIX']
             srvy = row['SURVEY']
@@ -39,7 +40,9 @@ class TestDESIDataset(unittest.TestCase):
             fname.mkdir(exist_ok=True, parents=True)
             num_spec = row['NUMTARGETS']
 
-            random_desi_coadd(fname, coaddname, num_spec, self.rng, redshift_name=rrname)
+            random_desi_coadd(fname, coaddname, num_spec, self.rng, redshift_name=rrname,
+                              targetid_start=curr_tid)
+            curr_tid += num_spec
 
         self.total_spec = np.sum(self.healpix_table["NUMTARGETS"])
 
@@ -120,6 +123,32 @@ class TestDESIDataset(unittest.TestCase):
         expected = self.spectra_set | set(extra_columns)
         data = next(data_iter)
         self.assertEqual(set(data.keys()), expected)
+
+
+    def test_train_valid_split(self):
+        # Test to ensure that all the data in the validation set is exclusive of the training set and fice versa
+        dataset_train = DESIDataset(self.datadir, self.healpix_table, seed=self.seed, train_frac=0.5, train_data=True, autoloop=True)
+        train_iter = iter(dataset_train)
+
+        dataset_valid = DESIDataset(self.datadir, self.healpix_table, seed=self.seed, train_frac=0.5, train_data=False, autoloop=True)
+        valid_iter = iter(dataset_valid)
+
+        seen_train_tids = []
+        seen_valid_tids = []
+
+        for _ in range(self.total_spec):
+            train = next(train_iter)
+            valid = next(valid_iter)
+
+            seen_train_tids.append(train["TARGETID"])
+            seen_valid_tids.append(valid["TARGETID"])
+
+        # These functionally check the same thing but its good to be sure.
+        assert len(set(seen_train_tids)) + len(set(seen_valid_tids)) == len(set(seen_train_tids + seen_valid_tids))
+        self.assertFalse(np.any(np.isin(seen_train_tids, seen_valid_tids)))
+        self.assertFalse(np.any(np.isin(seen_valid_tids, seen_train_tids)))
+
+
 
     def tearDown(self):
         self.tempdir.cleanup()
