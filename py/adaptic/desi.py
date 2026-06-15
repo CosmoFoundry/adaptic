@@ -4,6 +4,7 @@ import numpy as np
 from numpy.lib.recfunctions import merge_arrays, append_fields # To join the fibermap and redshifts headers
 from torch.utils.data import IterableDataset, get_worker_info
 
+import hashlib
 from pathlib import Path
 from copy import deepcopy
 
@@ -520,9 +521,15 @@ class DESIDataset(IterableDataset):
         if self.train_frac is not None:
             # Will select a random train_frac percentage of indices to save.
             nspec = self._details.shape[0]
-
             idcs = np.arange(nspec)
-            choice = self.rng.choice(idcs, size=int(nspec * self.train_frac), replace=False)
+
+            # Determine train/validation split using a newly initialized rng
+            # with a file specific rng so that the random choice is reproducible
+            # every time the file is loaded.
+            file_seed = hashlib.sha1((str(fnames[0].name) + str(self.seed)).encode()).hexdigest()
+            file_seed = int(file_seed, 16)
+            file_rng = np.random.default_rng(file_seed)
+            choice = file_rng.choice(idcs, size=int(nspec * self.train_frac), replace=False)
 
             keep_idcs = np.isin(idcs, choice)
             if not self.is_train:
