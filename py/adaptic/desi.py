@@ -526,7 +526,7 @@ class DESIDataset(IterableDataset):
             # Determine train/validation split using a newly initialized rng
             # with a file specific rng so that the random choice is reproducible
             # every time the file is loaded.
-            file_seed = hashlib.sha1((str(fnames[0].name) + str(self.seed)).encode()).hexdigest()
+            file_seed = hashlib.sha1((str(fnames[0]) + str(self.seed)).encode()).hexdigest()
             file_seed = int(file_seed, 16)
             file_rng = np.random.default_rng(file_seed)
             choice = file_rng.choice(idcs, size=int(nspec * self.train_frac), replace=False)
