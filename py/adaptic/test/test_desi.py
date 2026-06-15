@@ -102,6 +102,24 @@ class TestDESIDataset(unittest.TestCase):
             next(train_dl)
         del train_dl
 
+    def test_change_columns(self):
+        # First test adding extra columns
+        extra_columns = ["MEAN_PSF_TO_FIBER_SPECFLUX", "STD_FIBER_RA", "STD_FIBER_DEC",
+                         "MEAN_FIBER_DEC", "MEAN_FIBER_RA"]
+        dataset = DESIDataset(self.datadir, self.healpix_table, seed=self.seed, extra_cols=extra_columns)
+        data_iter = iter(dataset)
+
+        expected = set(DESIDataset.DEFAULT_COLUMNS) | self.spectra_set | set(extra_columns)
+        data = next(data_iter)
+        self.assertEqual(set(data.keys()), expected)
+
+        # Then test replacing the entire set of columns.
+        dataset = DESIDataset(self.datadir, self.healpix_table, seed=self.seed, return_cols=extra_columns)
+        data_iter = iter(dataset)
+
+        expected = self.spectra_set | set(extra_columns)
+        data = next(data_iter)
+        self.assertEqual(set(data.keys()), expected)
 
     def tearDown(self):
         self.tempdir.cleanup()
