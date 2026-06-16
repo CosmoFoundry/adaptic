@@ -242,12 +242,12 @@ class DESIDataset(IterableDataset):
                 # result, however, it does require an ordered version of the summary
                 # plot. We will shuffle the indices allocated to each worker
                 # later to regain the randomnes across the sky.
-                sort_idcs = np.argsort(self.summary["NUMTARGETS"])[::-1]
+                sort_idcs = np.argsort(self.summary['NUMTARGETS'])[::-1]
                 self.summary = self.summary[sort_idcs]
                 for i, row in enumerate(self.summary):
                     # Find the lowest bin, add the next number of targets
                     add_bin = np.argmin(ntargs_per_bin)
-                    ntargs_per_bin[add_bin] += row["NUMTARGETS"]
+                    ntargs_per_bin[add_bin] += row['NUMTARGETS']
                     idcs_per_bin[add_bin].append(i)
 
                 this_ids = np.array(idcs_per_bin[worker_id])
@@ -272,23 +272,23 @@ class DESIDataset(IterableDataset):
                 for i in range(self._details.shape[0]):
                     # Parse the example as a dictionary
                     example = {k: self._details[k][i] for k in self._return_cols}
-                    example["MU"] = self._mu[i]
-                    example["SIGMA"] = self._sigma[i]
+                    example['MU'] = self._mu[i]
+                    example['SIGMA'] = self._sigma[i]
                     if self.coadd_spectra:
-                        example["FLUX"] = self._flux[i, :]
-                        example["IVAR"] = self._ivar[i, :]
-                        example["MASK"] = self._mask[i, :]
+                        example['FLUX'] = self._flux[i, :]
+                        example['IVAR'] = self._ivar[i, :]
+                        example['MASK'] = self._mask[i, :]
                     else:
-                        example["FLUX"] = {c: self._flux[c][i, :] for c in self._flux}
-                        example["IVAR"] = {c: self._ivar[c][i, :] for c in self._ivar}
-                        example["MASK"] = {c: self._mask[c][i, :] for c in self._mask}
+                        example['FLUX'] = {c: self._flux[c][i, :] for c in self._flux}
+                        example['IVAR'] = {c: self._ivar[c][i, :] for c in self._ivar}
+                        example['MASK'] = {c: self._mask[c][i, :] for c in self._mask}
 
                     if self.transform:
                         if self.coadd_spectra:
-                            example["FLUX"] = self.transform(example["FLUX"])
+                            example['FLUX'] = self.transform(example['FLUX'])
                         else:
                             for c in self._flux.keys():
-                                example["FLUX"][c] = self.transform(example["FLUX"][c])
+                                example['FLUX'][c] = self.transform(example['FLUX'][c])
 
                     yield example
 
@@ -368,9 +368,9 @@ class DESIDataset(IterableDataset):
                 path and the second is the redrock path.
         """
         if 'HEALPIX' in row.dtype.names:
-            hpx = row["HEALPIX"]
-            srvy = row["SURVEY"]
-            prgrm = row["PROGRAM"]
+            hpx = row['HEALPIX']
+            srvy = row['SURVEY']
+            prgrm = row['PROGRAM']
             fname = self.base_dir / "healpix" / srvy / prgrm
             fname = fname / str(hpx // 100) / str(hpx)
             coaddname = fname / f"coadd-{srvy}-{prgrm}-{hpx}.fits"
@@ -410,11 +410,11 @@ class DESIDataset(IterableDataset):
         """
         with fitsio.FITS(fnames[0]) as h_coadd:
             # Reading the header should be fast, so this shouldn't be a problem.
-            nspec = h_coadd["FIBERMAP"].read_header()["NAXIS2"]
+            nspec = h_coadd['FIBERMAP'].read_header()['NAXIS2']
 
             with fitsio.FITS(fnames[1]) as h_rr:
-                fmap_available = set(h_coadd["FIBERMAP"].get_colnames())
-                rr_available   = set(h_rr["REDSHIFTS"].get_colnames())
+                fmap_available = set(h_coadd['FIBERMAP'].get_colnames())
+                rr_available   = set(h_rr['REDSHIFTS'].get_colnames())
 
                 fmap_read, rr_read = [], []
                 for col in self._return_cols:
@@ -428,8 +428,8 @@ class DESIDataset(IterableDataset):
                             f"or REDSHIFTS of {fnames[1]}"
                         )
 
-                fmap   = h_coadd["FIBERMAP"].read(columns=fmap_read)
-                rr_map = h_rr["REDSHIFTS"].read(columns=rr_read) if rr_read else None
+                fmap   = h_coadd['FIBERMAP'].read(columns=fmap_read)
+                rr_map = h_rr['REDSHIFTS'].read(columns=rr_read) if rr_read else None
 
             self._details = (merge_arrays([fmap, rr_map], asrecarray=True, flatten=True)
                              if rr_map is not None else fmap)
@@ -458,9 +458,9 @@ class DESIDataset(IterableDataset):
             # Fast ish coadd cameras because we're going to exploit
             # the fact that we already know what overlaps what.
             for c in self.cam_slice.keys():
-                fl = h_coadd[f"{c}_FLUX"].read()[keep_spec, :]
-                iv = h_coadd[f"{c}_IVAR"].read()[keep_spec, :]
-                m = h_coadd[f"{c}_MASK"].read()[keep_spec, :]
+                fl = h_coadd[f'{c}_FLUX'].read()[keep_spec, :]
+                iv = h_coadd[f'{c}_IVAR'].read()[keep_spec, :]
+                m = h_coadd[f'{c}_MASK'].read()[keep_spec, :]
 
                 # Extremely basic ivar weighted coadd
                 if self.coadd_spectra:
