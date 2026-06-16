@@ -304,8 +304,9 @@ class DESIDataset(IterableDataset):
 
 
     def _standardize_summary(self):
-        """Auto detect tiles-based vs. healpix-based summary table and update columns as needed.
-        Modifies self.summary in-place. Should be called only by DESIDataset constructor.
+        """
+            Auto detect tiles-based vs. healpix-based summary table and update columns as needed.
+            Modifies self.summary in-place. Should be called only by DESIDataset constructor.
         """
         # Confirm either HEALPIX or TILEID
         if 'HEALPIX' in self.summary.dtype.names:
@@ -406,7 +407,9 @@ class DESIDataset(IterableDataset):
             Parameters
             ----------
             fnames : list of :class:`~pathlib.Path`
-                A list of filenames to be loaded by this DESIDataset.
+                A list of filenames to be loaded by this DESIDataset. The first
+                elemnet is expected to be the filename of the coadd file, while
+                the second is expected to be the redrock file.
         """
         with fitsio.FITS(fnames[0]) as h_coadd:
             # Reading the header should be fast, so this shouldn't be a problem.
