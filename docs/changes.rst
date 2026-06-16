@@ -6,13 +6,16 @@ adaptic Change Log
 -------------------
 
 New Features:
+
 * Support tile based coadds in DESIDataset (PR `#1`_).
 * Add ability to change return columns of the DESIDataset (PR `#2`_).
 
 API Changes:
+
 * Remove TARGETID as a required return from DESIDataset (PR `#3`_).
 
 Bug Fixes:
+
 * Change how training and holdout sets are calculated to ensure exclusivity (PR `#4`_).
 
 .. _`#1`: https://github.com/CosmoFoundry/adaptic/pull/1
