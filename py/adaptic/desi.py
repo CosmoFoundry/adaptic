@@ -60,8 +60,11 @@ class DESIDataset(IterableDataset):
 
             summary_table : :class:`~numpy.array` or :class:`~astropy.table.Table`, optional
                 A numpy record array, or alternatively, an astropy table if
-                installed. At minimum needs to include the columns ["SURVEY", "PROGRAM",
-                "HEALPIX", "NSIDE", "NUMTARGETS"], although can contain additional
+                installed. If this table is for HEALPIX based coadds,
+                at minimum needs to include the columns ["SURVEY", "PROGRAM",
+                "HEALPIX", "NSIDE", "NUMTARGETS"]. If this table is for tile-based
+                coadds, it must include at minimum the columns ["TILEID", "LASTNIGHT"].
+                In both cases the table is allowed to contain additional
                 columns that will be ignored. Optional, if not passed the Dataset
                 will attempt to auto-discover the necessary file in the given `specprod_dir`.
                 If passed, override any auto-discovery.
