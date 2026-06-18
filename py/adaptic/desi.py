@@ -210,8 +210,59 @@ class DESIDataset(IterableDataset):
             self._return_cols = self.DEFAULT_COLUMNS + tuple(extra_cols)
 
     def __iter__(self):
-        worker_info = get_worker_info()
+        this_ids = self._balance_workers(worker_info=get_worker_info())
 
+        # Use a while loop automatically handle the autoloop=True case,
+        # and break at the end of one pass through if autoloop=False.
+        j = 0
+        num_reads = 0
+        while True:
+            row = self.summary[this_ids][j]
+            # print(f"{worker_info.id}, {row}")  # Left for debugging.
+            filenames = self._filenames_from_row(row)
+            if filenames is not None:    # could be None if files don't exist
+                num_reads += 1
+                self._load_and_coadd(filenames)
+
+                for i in range(self._details.shape[0]):
+                    # Parse the example as a dictionary
+                    example = {k: self._details[k][i] for k in self._return_cols}
+                    example['MU'] = self._mu[i]
+                    example['SIGMA'] = self._sigma[i]
+                    if self.coadd_spectra:
+                        example['FLUX'] = self._flux[i, :]
+                        example['IVAR'] = self._ivar[i, :]
+                        example['MASK'] = self._mask[i, :]
+                    else:
+                        example['FLUX'] = {c: self._flux[c][i, :] for c in self._flux}
+                        example['IVAR'] = {c: self._ivar[c][i, :] for c in self._ivar}
+                        example['MASK'] = {c: self._mask[c][i, :] for c in self._mask}
+
+                    if self.transform:
+                        if self.coadd_spectra:
+                            example['FLUX'] = self.transform(example['FLUX'])
+                        else:
+                            for c in self._flux.keys():
+                                example['FLUX'][c] = self.transform(example['FLUX'][c])
+
+                    yield example
+
+            # Loop back to the start of the files at the end.
+            j += 1
+            if (j == len(self.summary[this_ids])):
+                j = 0
+                if num_reads == 0:
+                    # something went wrong; looped through all options without finding anything to read
+                    raise RuntimeError("Looped through files without finding any to read! Check that the summary table is correct and that the files exist.")
+                if not self.autoloop:
+                    break
+
+    def _balance_workers(self, worker_info):
+        """
+            Determines the set of files that belong to this worker, if running with
+            more than a single worker. Should only be called by DESIDataset.__iter__.
+            Handles shuffling a worker's files if necessary.
+        """
         if worker_info is not None:
             # If worker info is not none there are multiple workers.
             # If the length of the summary table is less than the number of workers
@@ -267,51 +318,7 @@ class DESIDataset(IterableDataset):
         # If it's None we're in the main process so we can use the whole summary table for this process.
         else:
             this_ids = np.arange(len(self.summary))
-
-        # Loop forver.
-        j = 0
-        num_reads = 0
-        while True:
-            row = self.summary[this_ids][j]
-            # print(f"{worker_info.id}, {row}")  # Left for debugging.
-            filenames = self._filenames_from_row(row)
-            if filenames is not None:    # could be None if files don't exist
-                num_reads += 1
-                self._load_and_coadd(filenames)
-
-                for i in range(self._details.shape[0]):
-                    # Parse the example as a dictionary
-                    example = {k: self._details[k][i] for k in self._return_cols}
-                    example['MU'] = self._mu[i]
-                    example['SIGMA'] = self._sigma[i]
-                    if self.coadd_spectra:
-                        example['FLUX'] = self._flux[i, :]
-                        example['IVAR'] = self._ivar[i, :]
-                        example['MASK'] = self._mask[i, :]
-                    else:
-                        example['FLUX'] = {c: self._flux[c][i, :] for c in self._flux}
-                        example['IVAR'] = {c: self._ivar[c][i, :] for c in self._ivar}
-                        example['MASK'] = {c: self._mask[c][i, :] for c in self._mask}
-
-                    if self.transform:
-                        if self.coadd_spectra:
-                            example['FLUX'] = self.transform(example['FLUX'])
-                        else:
-                            for c in self._flux.keys():
-                                example['FLUX'][c] = self.transform(example['FLUX'][c])
-
-                    yield example
-
-            # Loop back to the start of the files at the end.
-            j += 1
-            if (j == len(self.summary[this_ids])):
-                j = 0
-                if num_reads == 0:
-                    # something went wrong; looped through all options without finding anything to read
-                    raise RuntimeError("Looped through files without finding any to read! Check that the summary table is correct and that the files exist.")
-                if not self.autoloop:
-                    break
-
+        return this_ids
 
     def _standardize_summary(self):
         """
