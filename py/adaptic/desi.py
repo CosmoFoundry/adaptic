@@ -287,12 +287,9 @@ class DESIDataset(IterableDataset):
                 # files into num_workers "roughly equal sized" bins
                 # based on the number of targets.
                 # See Section 5 of Graham 1969 "Bounds on Multiprocessing Timing Anomalies"
-                # for more details.
-                # This algorithm is entirely
-                # deterministic so every worker should generate the exact same
-                # result, however, it does require an ordered version of the summary
-                # plot. We will shuffle the indices allocated to each worker
-                # later to regain the randomnes across the sky.
+                # This algorithm is entirely deterministic so every worker will
+                # generate the exact same result, however, it does require an
+                # ordered version of the summary table.
                 sort_idcs = np.argsort(self.summary['NUMTARGETS'])[::-1]
                 self.summary = self.summary[sort_idcs]
                 for i, row in enumerate(self.summary):
@@ -307,13 +304,13 @@ class DESIDataset(IterableDataset):
                 this_ids = np.array(idcs_per_bin[worker_id])
 
                 # We then reshuffle thise indices to regain randomness in file
-                # size and location.
-                # Interestingly since each worker has its own rng  with the same seed
-                # they'll shufflle their idcs in the same way, maintaining rough parity
-                # in file size across workers.
-                # TODO: consider if this is ok, and if not, change each workers seed based on its worker id
+                # size and location. Shuffle each worker with a different seed
+                # to ensure relative to file size each worker is shuffled uniquely.
+                # I.e. with the same seed and same number of files the shuffed order
+                # will be the same in terms of file size, and this avoids that.
                 # TODO: consider if the user passes shuffle=False, do they have a specific ordering in mind, and if so, reorder to match that order across the workers?
-                self.rng.shuffle(this_ids)
+                worker_rng = np.random.defaut_rng(self.seed + worker_id)
+                worker_rng.shuffle(this_ids)
 
         # If it's None we're in the main process so we can use the whole summary table for this process.
         else:
