@@ -78,11 +78,12 @@ def get_science_only(fmap):
 ```
 
 ## Datamodel
-Calling `next()` on a `DESIDataset` returns a (targetid, dictionary) pair, where the keys of the dictionary are the original column names, and each value is the value of that column for that spectrum. The targetid is a unique targetid for each spectrum defined in DESI.
+
+Calling `next()` on a `DESIDataset` returns a dictionary, where the keys of the dictionary are the original column names, and each value is the value of that column for that spectrum.
 
 If the dataset is used in conjunction with a `DataLoader` to perform batching, PyTorch will automatically stack each dictionary value. For example, a DESI spectrum has 7781 pixels, and is returned as `data["FLUX"]`. If used in a DataLoader, `data["FLUX"]` is a (batchsize, 7781) array of spectra.
 
-The following is a list of returned values for a single spectrum:
+The following is a list of the default returned values for a single spectrum:
 
 | NAME               | TYPE           |
 | ------------------ | -------------- |
@@ -121,6 +122,11 @@ The following is a list of returned values for a single spectrum:
 | SUBTYPE            | CHAR[20]       |
 
 \* Only when `coadd_spectra = True`. If `coadd_spectra = False`, FLUX, IVAR and MASK are instead dictionaries with keys `B, R, Z` corresponding to each of the three wavelength arms of the DESI spectrograph.
+
+The default DESI header/metadata column keys are available as `DESIDataset.DEFAULT_COLUMNS` (in addition to the always-returned `FLUX`, `IVAR`, and `MASK` keys). Additional columns may be requested with the
+`extra_cols` constructor option, or the entire set can be replaced with the `return_cols` option.
+`DESIDataset` auto-derives whether these header/metadata columns come from the coadd `FIBERMAP` HDU or the redrock `REDSHIFTS` HDU of the
+input DESI FITS files.
 
 ## Minimum Viable Example
 This is a small example that uses the `DESIDataset` to train a small fully-connected autoencoder. First, we instantiate two datasets, one for training and one for validation, using the public dr1 data:
