@@ -218,7 +218,6 @@ class DESIDataset(IterableDataset):
         num_reads = 0
         while True:
             row = self.summary[this_ids][j]
-            # print(f"{worker_info.id}, {row}")  # Left for debugging.
             filenames = self._filenames_from_row(row)
             if filenames is not None:    # could be None if files don't exist
                 num_reads += 1
@@ -274,10 +273,10 @@ class DESIDataset(IterableDataset):
 
             if num_workers > num_files:
                 if worker_id == 0:  print("Num Workers > Num Files. Will duplicate files across workers!")
-
-                # This worker gets worker_id % num_files, which seems reasonably
-                # the most straightforward decision on what file to keep.
-                this_ids = np.asarray([worker_id % num_files])
+                # Every worker gets every file, but each worker will shuffle them
+                # differently. This maintains both randomness of the files plus
+                # uniformity of access for each spectrum.
+                this_ids = np.arange(num_files)
 
             else:
                 ntargs_per_bin = np.zeros(num_workers)
@@ -303,15 +302,15 @@ class DESIDataset(IterableDataset):
                 # to smallest file size.
                 this_ids = np.array(idcs_per_bin[worker_id])
 
-                # We then reshuffle thise indices to regain randomness in file
-                # size and location. Shuffle each worker with a different seed
-                # to ensure relative to file size each worker is shuffled uniquely.
-                # I.e. with the same seed and same number of files the shuffed order
-                # will be the same in terms of file size, and this avoids that.
-                # TODO: consider if the user passes shuffle=False, do they have a specific ordering in mind, and if so, reorder to match that order across the workers?
-                if self.shuffle_files:
-                    worker_rng = np.random.defaut_rng(self.seed + worker_id)
-                    worker_rng.shuffle(this_ids)
+            # We then reshuffle thise indices to regain randomness in file
+            # size and location. Shuffle each worker with a different seed
+            # to ensure relative to file size each worker is shuffled uniquely.
+            # I.e. with the same seed and same number of files the shuffed order
+            # will be the same in terms of file size, and this avoids that.
+            # TODO: consider if the user passes shuffle=False, do they have a specific ordering in mind, and if so, reorder to match that order across the workers?
+            if self.shuffle_files:
+                worker_rng = np.random.default_rng(self.seed + worker_id)
+                worker_rng.shuffle(this_ids)
 
         # If it's None we're in the main process so we can use the whole summary table for this process.
         else:
