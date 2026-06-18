@@ -442,8 +442,18 @@ class DESIDataset(IterableDataset):
                                 f"or REDSHIFTS of {fnames[1]}"
                             )
 
-                fmap   = h_coadd['FIBERMAP'].read(columns=self._fibermap_cols)
-                rr_map = h_rr['REDSHIFTS'].read(columns=self._redshifts_cols) if self._redshifts_cols else None
+                try:
+                    fmap   = h_coadd['FIBERMAP'].read(columns=self._fibermap_cols)
+                except Exception as e:
+                    msg = f"Failed to read one or more of {self._fibermap_cols} from FIBERMAP HDU of {fnames[0]}"
+                    raise ValueError(msg) from e
+
+                try:
+                    rr_map = h_rr['REDSHIFTS'].read(columns=self._redshifts_cols) if self._redshifts_cols else None
+                except Exception as e:
+                    msg = f"Failed to read one or more of {self._redshifts_cols} from REDSHIFTS HDU of {fnames[1]}"
+                    raise ValueError(msg) from e
+
 
             self._details = (merge_arrays([fmap, rr_map], asrecarray=True, flatten=True)
                              if rr_map is not None else fmap)
