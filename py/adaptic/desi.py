@@ -4,6 +4,7 @@ import numpy as np
 from numpy.lib.recfunctions import merge_arrays, append_fields # To join the fibermap and redshifts headers
 from torch.utils.data import IterableDataset, get_worker_info
 
+import hashlib
 from pathlib import Path
 from copy import deepcopy
 
@@ -59,8 +60,11 @@ class DESIDataset(IterableDataset):
 
             summary_table : :class:`~numpy.array` or :class:`~astropy.table.Table`, optional
                 A numpy record array, or alternatively, an astropy table if
-                installed. At minimum needs to include the columns ["SURVEY", "PROGRAM",
-                "HEALPIX", "NSIDE", "NUMTARGETS"], although can contain additional
+                installed. If this table is for HEALPIX based coadds,
+                at minimum needs to include the columns ["SURVEY", "PROGRAM",
+                "HEALPIX", "NSIDE", "NUMTARGETS"]. If this table is for tile-based
+                coadds, it must include at minimum the columns ["TILEID", "LASTNIGHT"].
+                In both cases the table is allowed to contain additional
                 columns that will be ignored. Optional, if not passed the Dataset
                 will attempt to auto-discover the necessary file in the given `specprod_dir`.
                 If passed, override any auto-discovery.
@@ -238,12 +242,12 @@ class DESIDataset(IterableDataset):
                 # result, however, it does require an ordered version of the summary
                 # plot. We will shuffle the indices allocated to each worker
                 # later to regain the randomnes across the sky.
-                sort_idcs = np.argsort(self.summary["NUMTARGETS"])[::-1]
+                sort_idcs = np.argsort(self.summary['NUMTARGETS'])[::-1]
                 self.summary = self.summary[sort_idcs]
                 for i, row in enumerate(self.summary):
                     # Find the lowest bin, add the next number of targets
                     add_bin = np.argmin(ntargs_per_bin)
-                    ntargs_per_bin[add_bin] += row["NUMTARGETS"]
+                    ntargs_per_bin[add_bin] += row['NUMTARGETS']
                     idcs_per_bin[add_bin].append(i)
 
                 # An array of indices that will *look* random but which, within
@@ -278,23 +282,23 @@ class DESIDataset(IterableDataset):
                 for i in range(self._details.shape[0]):
                     # Parse the example as a dictionary
                     example = {k: self._details[k][i] for k in self._return_cols}
-                    example["MU"] = self._mu[i]
-                    example["SIGMA"] = self._sigma[i]
+                    example['MU'] = self._mu[i]
+                    example['SIGMA'] = self._sigma[i]
                     if self.coadd_spectra:
-                        example["FLUX"] = self._flux[i, :]
-                        example["IVAR"] = self._ivar[i, :]
-                        example["MASK"] = self._mask[i, :]
+                        example['FLUX'] = self._flux[i, :]
+                        example['IVAR'] = self._ivar[i, :]
+                        example['MASK'] = self._mask[i, :]
                     else:
-                        example["FLUX"] = {c: self._flux[c][i, :] for c in self._flux}
-                        example["IVAR"] = {c: self._ivar[c][i, :] for c in self._ivar}
-                        example["MASK"] = {c: self._mask[c][i, :] for c in self._mask}
+                        example['FLUX'] = {c: self._flux[c][i, :] for c in self._flux}
+                        example['IVAR'] = {c: self._ivar[c][i, :] for c in self._ivar}
+                        example['MASK'] = {c: self._mask[c][i, :] for c in self._mask}
 
                     if self.transform:
                         if self.coadd_spectra:
-                            example["FLUX"] = self.transform(example["FLUX"])
+                            example['FLUX'] = self.transform(example['FLUX'])
                         else:
                             for c in self._flux.keys():
-                                example["FLUX"][c] = self.transform(example["FLUX"][c])
+                                example['FLUX'][c] = self.transform(example['FLUX'][c])
 
                     yield example
 
@@ -310,8 +314,9 @@ class DESIDataset(IterableDataset):
 
 
     def _standardize_summary(self):
-        """Auto detect tiles-based vs. healpix-based summary table and update columns as needed.
-        Modifies self.summary in-place. Should be called only by DESIDataset constructor.
+        """
+            Auto detect tiles-based vs. healpix-based summary table and update columns as needed.
+            Modifies self.summary in-place. Should be called only by DESIDataset constructor.
         """
         # Confirm either HEALPIX or TILEID
         if 'HEALPIX' in self.summary.dtype.names:
@@ -374,9 +379,9 @@ class DESIDataset(IterableDataset):
                 path and the second is the redrock path.
         """
         if 'HEALPIX' in row.dtype.names:
-            hpx = row["HEALPIX"]
-            srvy = row["SURVEY"]
-            prgrm = row["PROGRAM"]
+            hpx = row['HEALPIX']
+            srvy = row['SURVEY']
+            prgrm = row['PROGRAM']
             fname = self.base_dir / "healpix" / srvy / prgrm
             fname = fname / str(hpx // 100) / str(hpx)
             coaddname = fname / f"coadd-{srvy}-{prgrm}-{hpx}.fits"
@@ -412,15 +417,17 @@ class DESIDataset(IterableDataset):
             Parameters
             ----------
             fnames : list of :class:`~pathlib.Path`
-                A list of filenames to be loaded by this DESIDataset.
+                A list of filenames to be loaded by this DESIDataset. The first
+                elemnet is expected to be the filename of the coadd file, while
+                the second is expected to be the redrock file.
         """
         with fitsio.FITS(fnames[0]) as h_coadd:
             # Reading the header should be fast, so this shouldn't be a problem.
-            nspec = h_coadd["FIBERMAP"].read_header()["NAXIS2"]
+            nspec = h_coadd['FIBERMAP'].read_header()['NAXIS2']
 
             with fitsio.FITS(fnames[1]) as h_rr:
-                fmap_available = set(h_coadd["FIBERMAP"].get_colnames())
-                rr_available   = set(h_rr["REDSHIFTS"].get_colnames())
+                fmap_available = set(h_coadd['FIBERMAP'].get_colnames())
+                rr_available   = set(h_rr['REDSHIFTS'].get_colnames())
 
                 fmap_read, rr_read = [], []
                 for col in self._return_cols:
@@ -434,8 +441,8 @@ class DESIDataset(IterableDataset):
                             f"or REDSHIFTS of {fnames[1]}"
                         )
 
-                fmap   = h_coadd["FIBERMAP"].read(columns=fmap_read)
-                rr_map = h_rr["REDSHIFTS"].read(columns=rr_read) if rr_read else None
+                fmap   = h_coadd['FIBERMAP'].read(columns=fmap_read)
+                rr_map = h_rr['REDSHIFTS'].read(columns=rr_read) if rr_read else None
 
             self._details = (merge_arrays([fmap, rr_map], asrecarray=True, flatten=True)
                              if rr_map is not None else fmap)
@@ -464,9 +471,9 @@ class DESIDataset(IterableDataset):
             # Fast ish coadd cameras because we're going to exploit
             # the fact that we already know what overlaps what.
             for c in self.cam_slice.keys():
-                fl = h_coadd[f"{c}_FLUX"].read()[keep_spec, :]
-                iv = h_coadd[f"{c}_IVAR"].read()[keep_spec, :]
-                m = h_coadd[f"{c}_MASK"].read()[keep_spec, :]
+                fl = h_coadd[f'{c}_FLUX'].read()[keep_spec, :]
+                iv = h_coadd[f'{c}_IVAR'].read()[keep_spec, :]
+                m = h_coadd[f'{c}_MASK'].read()[keep_spec, :]
 
                 # Extremely basic ivar weighted coadd
                 if self.coadd_spectra:
@@ -530,9 +537,15 @@ class DESIDataset(IterableDataset):
         if self.train_frac is not None:
             # Will select a random train_frac percentage of indices to save.
             nspec = self._details.shape[0]
-
             idcs = np.arange(nspec)
-            choice = self.rng.choice(idcs, size=int(nspec * self.train_frac), replace=False)
+
+            # Determine train/validation split using a newly initialized rng
+            # with a file specific rng so that the random choice is reproducible
+            # every time the file is loaded.
+            file_seed = hashlib.sha1((str(fnames[0]) + str(self.seed)).encode()).hexdigest()
+            file_seed = int(file_seed, 16)
+            file_rng = np.random.default_rng(file_seed)
+            choice = file_rng.choice(idcs, size=int(nspec * self.train_frac), replace=False)
 
             keep_idcs = np.isin(idcs, choice)
             if not self.is_train:
