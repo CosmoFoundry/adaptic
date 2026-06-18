@@ -74,11 +74,10 @@ class DESIDataset(IterableDataset):
                 numpy RNG object. Defaults to 123.
 
             shuffle_files : bool, optional
-                Whether or not the summary_table needs to be randomly shuffled or not.
-                Defaults to True. NOTE: Table order is not preserved if
-                this dataset is used with a pytorch data loader with num_workers > 1.
-                In that case, the rows are split such that each worker gets approximately
-                the same amount of spectra, without regard for file ordering.
+                Whether or not the summary_table should be randomly shuffled or not.
+                Defaults to True. NOTE: Setting shuffle_files=False does not
+                guarantee preservation of table order if this dataset
+                is used with a pytorch data loader with num_workers > 1.
 
             transform : callable, optional
                 A pytorch transform object to apply to the output FLUX. Defaults
