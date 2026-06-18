@@ -157,8 +157,8 @@ class DESIDataset(IterableDataset):
 
         self._standardize_summary()
         self._known_missing_files = set()
-
-        if shuffle_files:
+        self.shuffle_files = shuffle_files
+        if self.shuffle_files:
             self.rng.shuffle(self.summary)
 
         # Nominally used for things like transforming to tensor,
@@ -309,8 +309,9 @@ class DESIDataset(IterableDataset):
                 # I.e. with the same seed and same number of files the shuffed order
                 # will be the same in terms of file size, and this avoids that.
                 # TODO: consider if the user passes shuffle=False, do they have a specific ordering in mind, and if so, reorder to match that order across the workers?
-                worker_rng = np.random.defaut_rng(self.seed + worker_id)
-                worker_rng.shuffle(this_ids)
+                if self.shuffle_files:
+                    worker_rng = np.random.defaut_rng(self.seed + worker_id)
+                    worker_rng.shuffle(this_ids)
 
         # If it's None we're in the main process so we can use the whole summary table for this process.
         else:
