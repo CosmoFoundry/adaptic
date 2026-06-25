@@ -271,11 +271,7 @@ class DESIDataset(IterableDataset):
             num_files = len(self.summary)
 
             if num_workers > num_files:
-                if worker_id == 0:  print("Num Workers > Num Files. Will duplicate files across workers!")
-                # Every worker gets every file, but each worker will shuffle them
-                # differently. This maintains both randomness of the files plus
-                # uniformity of access for each spectrum.
-                this_ids = np.arange(num_files)
+                if worker_id == 0:  raise ValueError(f"Require num_workers ({num_workers}) < num_files ({num_files})")
 
             else:
                 ntargs_per_bin = np.zeros(num_workers)
