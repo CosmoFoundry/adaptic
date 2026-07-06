@@ -322,22 +322,28 @@ class DESIDataset(IterableDataset):
             Auto detect tiles-based vs. healpix-based summary table and update columns as needed.
             Modifies self.summary in-place. Should be called only by DESIDataset constructor.
         """
+        is_pix_based = ('HEALPIX' in self.summary.dtype.names) or ('UNIQPIX' in self.summary.dtype.names)
+
         # Confirm either HEALPIX or TILEID
-        if ('HEALPIX' in self.summary.dtype.names) or ('UNIQPIX' in self.summary.dtype.names):
+        if is_pix_based:
             for col in ('SURVEY', 'PROGRAM'):
-                assert col in self.summary.dtype.names, f'{col} missing from HEALPIX-based summary table'
+                assert col in self.summary.dtype.names, f"{col} missing from HEALPIX-based summary table"
+            if ('HEALPIX' in self.summary.dtype.names) and ('UNIQPIX' in self.summary.dtype.names):
+                raise ValueError("Should only have either HEALPIX or UNIQPIX, not both")
+
         elif 'TILEID' in self.summary.dtype.names:
             for col in ('LASTNIGHT',):
-                assert col in self.summary.dtype.names, f'{col} missing from TILEID-based summary table'
+                assert col in self.summary.dtype.names, f"{col} missing from TILEID-based summary table"
         else:
             raise ValueError(f"summary must have HEALPIX,SURVEY,PROGRAM or TILEID,LASTNIGHT columns; found {self.summary.dtype.names}")
 
-        # Trim to unique SURVEY, PROGRAM, HEALPIX if needed;
+        # Trim to unique SURVEY, PROGRAM, PIX if needed;
         # tilepix.fits files map tiles:healpix and have multiple entries per healpix
         # Note: this section can be removed if we standardize on a different healpix summary
         #       file for each production
-        if 'HEALPIX' in self.summary.dtype.names:
-            ii = np.unique(self.summary[['SURVEY', 'PROGRAM', 'HEALPIX']], return_index=True)[1]
+        if is_pix_based:
+            pix_key = "HEALPIX" if 'HEALPIX' in self.summary.dtype.names else "UNIQPIX"
+            ii = np.unique(self.summary[['SURVEY', 'PROGRAM', pix_key]], return_index=True)[1]
             self.summary = self.summary[ii]
 
         # Add default NUMTARGETS if needed; load-balancing may be off, but at least don't crash
@@ -358,7 +364,7 @@ class DESIDataset(IterableDataset):
 
         # if tiles-based (not healpix), expand to one row per PETAL and add NUMTARGETS=500 column
         if (('TILEID' in self.summary.dtype.names) and
-            ('HEALPIX' not in self.summary.dtype.names) and
+            not is_pix_based and
             ('PETAL' not in self.summary.dtype.names)
             ):
             summary = np.repeat(self.summary, 10)
