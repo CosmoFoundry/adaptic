@@ -1,7 +1,7 @@
 import os
 import fitsio
 import numpy as np
-from numpy.lib.recfunctions import merge_arrays, append_fields # To join the fibermap and redshifts headers
+from numpy.lib.recfunctions import merge_arrays, append_fields, rename_fields
 from torch.utils.data import IterableDataset, get_worker_info
 
 import hashlib
@@ -348,8 +348,12 @@ class DESIDataset(IterableDataset):
 
         # Add default NUMTARGETS if needed; load-balancing may be off, but at least don't crash
         if 'NUMTARGETS' not in self.summary.dtype.names:
-            numtargets = 500*np.ones(len(self.summary))
-            self.summary = append_fields(self.summary, 'NUMTARGETS', numtargets, usemask=False)
+            # UNIQPIX might use NTARGETS instead of NUMTARGETS
+            if 'NTARGETS' in self.summary.dtype.names:
+                self.summary = rename_fields(self.summary, {'NTARGETS': 'NUMTARGETS'})
+            else:
+                numtargets = 500*np.ones(len(self.summary))
+                self.summary = append_fields(self.summary, 'NUMTARGETS', numtargets, usemask=False)
 
         # promote bytestring SURVEY, PROGRAM columns to unicode columns
         description = self.summary.dtype.descr
