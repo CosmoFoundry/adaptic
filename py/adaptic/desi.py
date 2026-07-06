@@ -271,7 +271,7 @@ class DESIDataset(IterableDataset):
             num_files = len(self.summary)
 
             if num_workers > num_files:
-                if worker_id == 0:  raise ValueError(f"Require num_workers ({num_workers}) < num_files ({num_files})")
+                if worker_id == 0:  raise ValueError(f"Require num_workers ({num_workers}) <= num_files ({num_files})")
 
             else:
                 ntargs_per_bin = np.zeros(num_workers)
