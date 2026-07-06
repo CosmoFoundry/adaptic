@@ -74,11 +74,10 @@ class DESIDataset(IterableDataset):
                 numpy RNG object. Defaults to 123.
 
             shuffle_files : bool, optional
-                Whether or not the summary_table needs to be randomly shuffled or not.
-                Defaults to True. NOTE: Table order is not preserved if
-                this dataset is used with a pytorch data loader with num_workers > 1.
-                In that case, the rows are split such that each worker gets approximately
-                the same amount of spectra, without regard for file ordering.
+                Whether or not the summary_table should be randomly shuffled or not.
+                Defaults to True. NOTE: Setting shuffle_files=False does not
+                guarantee preservation of table order if this dataset
+                is used with a pytorch data loader with num_workers > 1.
 
             transform : callable, optional
                 A pytorch transform object to apply to the output FLUX. Defaults
@@ -157,8 +156,8 @@ class DESIDataset(IterableDataset):
 
         self._standardize_summary()
         self._known_missing_files = set()
-
-        if shuffle_files:
+        self.shuffle_files = shuffle_files
+        if self.shuffle_files:
             self.rng.shuffle(self.summary)
 
         # Nominally used for things like transforming to tensor,
@@ -215,60 +214,14 @@ class DESIDataset(IterableDataset):
         self._redshifts_cols = None
 
     def __iter__(self):
-        worker_info = get_worker_info()
+        this_ids = self._balance_workers(worker_info=get_worker_info())
 
-        if worker_info is not None:
-            # IF worker info is not none there are multiple workers.
-            # If the length of the summary table is less than the number of workers
-            #  we have to handle that specially, so that every worker actually gets
-            # files to load.
-            num_workers = worker_info.num_workers
-            worker_id = worker_info.id
-            num_files = len(self.summary)
-
-            if num_workers > num_files:
-                if worker_id == 0:  print("Num Workers > Num Files. Will duplicate files across workers!")
-
-                # This worker gets worker_id % num_files, which seems reasonably
-                # the most straightforward decision on what file to keep.
-                this_ids = np.asarray([worker_id % num_files])
-
-            else:
-                ntargs_per_bin = np.zeros(num_workers)
-                idcs_per_bin = {k: [] for k in range(num_workers)}
-
-                # Fast and decently close to perfect algorithm to split the
-                # files into num_workers "roughly equal sized" bins
-                # based on the number of targets.
-                # See Section 5 of Graham 1969 "Bounds on Multiprocessing Timing Anomalies"
-                # for more details.
-                # This algorithm is entirely
-                # deterministic so every worker should generate the exact same
-                # result, however, it does require an ordered version of the summary
-                # plot. We will shuffle the indices allocated to each worker
-                # later to regain the randomnes across the sky.
-                sort_idcs = np.argsort(self.summary['NUMTARGETS'])[::-1]
-                self.summary = self.summary[sort_idcs]
-                for i, row in enumerate(self.summary):
-                    # Find the lowest bin, add the next number of targets
-                    add_bin = np.argmin(ntargs_per_bin)
-                    ntargs_per_bin[add_bin] += row['NUMTARGETS']
-                    idcs_per_bin[add_bin].append(i)
-
-                this_ids = np.array(idcs_per_bin[worker_id])
-                # Interestingly since each worker has its own rng  with the same seed
-                # they'll shufflle their idcs in the same way, maintaining rough parity
-                # in file size across workers.
-        # If it's None we're in the main process so we can use the whole summary table for this process.
-        else:
-            this_ids = np.arange(len(self.summary))
-
-        # Loop forver.
+        # Use a while loop automatically handle the autoloop=True case,
+        # and break at the end of one pass through if autoloop=False.
         j = 0
         num_reads = 0
         while True:
             row = self.summary[this_ids][j]
-            # print(f"{worker_info.id}, {row}")  # Left for debugging.
             filenames = self._filenames_from_row(row)
             if filenames is not None:    # could be None if files don't exist
                 num_reads += 1
@@ -307,6 +260,62 @@ class DESIDataset(IterableDataset):
                 if not self.autoloop:
                     break
 
+    def _balance_workers(self, worker_info):
+        """
+            Determines the set of files that belong to this worker, if running with
+            more than a single worker. Should only be called by DESIDataset.__iter__.
+            Handles shuffling a worker's files if necessary.
+        """
+        if worker_info is not None:
+            # If worker info is not none there are multiple workers.
+            # If the length of the summary table is less than the number of workers
+            # we have to handle that specially, so that every worker actually gets
+            # files to load.
+            num_workers = worker_info.num_workers
+            worker_id = worker_info.id
+            num_files = len(self.summary)
+
+            if num_workers > num_files:
+                if worker_id == 0:  raise ValueError(f"Require num_workers ({num_workers}) <= num_files ({num_files})")
+
+            else:
+                ntargs_per_bin = np.zeros(num_workers)
+                idcs_per_bin = {k: [] for k in range(num_workers)}
+
+                # Fast and decently close to perfect algorithm to split the
+                # files into num_workers "roughly equal sized" bins
+                # based on the number of targets.
+                # See Section 5 of Graham 1969 "Bounds on Multiprocessing Timing Anomalies"
+                # This algorithm is entirely deterministic so every worker will
+                # generate the exact same result, however, it does require an
+                # ordered version of the summary table.
+                sort_idcs = np.argsort(self.summary['NUMTARGETS'])[::-1]
+                self.summary = self.summary[sort_idcs]
+                for i, row in enumerate(self.summary):
+                    # Find the lowest bin, add the next number of targets
+                    add_bin = np.argmin(ntargs_per_bin)
+                    ntargs_per_bin[add_bin] += row['NUMTARGETS']
+                    idcs_per_bin[add_bin].append(i)
+
+                # An array of indices that will *look* random but which, within
+                # each worker, are actually the indices corresponding to largest
+                # to smallest file size.
+                this_ids = np.array(idcs_per_bin[worker_id])
+
+            # We then reshuffle thise indices to regain randomness in file
+            # size and location. Shuffle each worker with a different seed
+            # to ensure relative to file size each worker is shuffled uniquely.
+            # I.e. with the same seed and same number of files the shuffed order
+            # will be the same in terms of file size, and this avoids that.
+            # TODO: consider if the user passes shuffle=False, do they have a specific ordering in mind, and if so, reorder to match that order across the workers?
+            if self.shuffle_files:
+                worker_rng = np.random.default_rng(self.seed + worker_id)
+                worker_rng.shuffle(this_ids)
+
+        # If it's None we're in the main process so we can use the whole summary table for this process.
+        else:
+            this_ids = np.arange(len(self.summary))
+        return this_ids
 
     def _standardize_summary(self):
         """

@@ -13,15 +13,18 @@ New Features:
 API Changes:
 
 * Remove TARGETID as a required return from DESIDataset (PR `#3`_).
+* Raise a value error if num_workers is less than num_files (PR `#7`_).
 
 Bug Fixes:
 
 * Change how training and holdout sets are calculated to ensure exclusivity (PR `#4`_).
+* Correct shuffling of files when worker balancing (PR `#7`_).
 
 .. _`#1`: https://github.com/CosmoFoundry/adaptic/pull/1
 .. _`#2`: https://github.com/CosmoFoundry/adaptic/pull/2
 .. _`#3`: https://github.com/CosmoFoundry/adaptic/pull/3
 .. _`#4`: https://github.com/CosmoFoundry/adaptic/pull/4
+.. _`#7`: https://github.com/CosmoFoundry/adaptic/pull/7
 
 
 0.0.1 (2026-04-17)
