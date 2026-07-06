@@ -382,14 +382,20 @@ class DESIDataset(IterableDataset):
                 List of determined path names. The first element is the coadd
                 path and the second is the redrock path.
         """
-        if 'HEALPIX' in row.dtype.names:
-            hpx = row['HEALPIX']
+        if ('HEALPIX' in row.dtype.names) or ('UNIQPIX' in row.dtype.names):
+            pix_key = 'HEALPIX' if ('HEALPIX' in row.dtype.names) else 'UNIQPIX'
+            pix = row[pix_key]
             srvy = row['SURVEY']
             prgrm = row['PROGRAM']
-            fname = self.base_dir / "healpix" / srvy / prgrm
-            fname = fname / str(hpx // 100) / str(hpx)
-            coaddname = fname / f"coadd-{srvy}-{prgrm}-{hpx}.fits"
-            rrname = fname / f"redrock-{srvy}-{prgrm}-{hpx}.fits"
+
+            if ('HEALPIX' in row.dtype.names):
+                fname = self.base_dir / "healpix" / srvy / prgrm
+            else:
+                fname = self.base_dir / "spectra" / srvy / prgrm
+
+            fname = fname / str(pix // 100) / str(pix)
+            coaddname = fname / f"coadd-{srvy}-{prgrm}-{pix}.fits"
+            rrname = fname / f"redrock-{srvy}-{prgrm}-{pix}.fits"
         elif 'TILEID' in row.dtype.names:
             tileid = row['TILEID']
             night = row['LASTNIGHT']
