@@ -55,8 +55,8 @@ class DESIDataset(IterableDataset):
             specprod_dir : str or :class:`~pathlib.Path`
                 The base directory of the spectroscopic production. Can be in any location,
                 as long as the specprod follows main DESI data release conventions.
-                That is, the healpix coadded spectra are stored in
-                {specprod_dir}/healpix/{survey}/{program}/{healpix // 100}/{healpix}
+                For example, healpix coadded spectra are stored in
+                {specprod_dir}/healpix/{survey}/{program}/{healpix // 100}/{healpix}.
 
             summary_table : :class:`~numpy.array` or :class:`~astropy.table.Table`, optional
                 A numpy record array, or alternatively, an astropy table if
@@ -618,3 +618,66 @@ class DESIDataset(IterableDataset):
                            train_frac=self.train_frac, train_data=self.is_train,
                            coadd_spectra=self.coadd_spectra, filter_func=self.filter_func,
                            autoloop=self.autoloop, return_cols=self._return_cols)
+
+def find_and_concat_uniqpix_tables(specprod_dir, ignore_survey=None, ignore_program=None):
+    """
+        Finds all `uniqpix-{survey}-{program}.fits` tables and concatenates them.
+        Provides some ability to ignore some program/surveys.
+
+        Parameters
+        ----------
+        specprod_dir : str or :class:`~pathlib.Path`
+            The base directory of the spectroscopic production. Can be in any location,
+            as long as the specprod follows main DESI data release conventions.
+            That is, the uniqpix coadded spectra are stored in
+            {specprod_dir}/spectra/{survey}/{program}/{uniqpix // 100}/{uniqpix}
+
+        ignore_survey : list of str, optional
+            A list of survey strings to ignore when loading the uniqpix tables.
+            Possible values are any subset of ['cmx', 'main', 'special', 'sv1', 'sv2', 'sv3'].
+            Defaults to None, which doesn't ignore anything.
+
+        ignore_program : list of str, optional
+            A list of prorgam strings to ignore when loading the uniqpix tables.
+            Possible values are any subset of ['backup', 'bright', 'dark', 'other'].
+            Defaults to None, which doesn't ignore anything.
+
+        Returns
+        -------
+        :class:`~numpy.array`
+            A numpy record array with the requisite columns (['UNIQPIX',
+            'SURVEY', 'PROGRAM', 'NTARGETS']) to instantiate a
+            DESIDataset object that loads uniqpix coadded spectra.
+
+    """
+    tbls = []
+    spec_path = Path(specprod_dir) / "spectra"
+    if not spec_path.exists():
+        raise ValueError("No UNIQPIX coadds found for this specprod.")
+
+    if ignore_program is None:
+        ignore_program = []
+    if ignore_survey is None:
+        ignore_survey = []
+
+    for srvy_path in spec_path.glob("*"):
+        srvy = srvy_path.name
+        if srvy in ignore_survey: continue
+        for prgrm_path in srvy_path.glob("*"):
+            prgrm = prgrm_path.name
+            if prgrm in ignore_program: continue
+
+            fname = prgrm_path / f"uniqpix-{srvy}-{prgrm}.fits"
+            # If it doesn't exist something is wrong but catch it anyway.
+            if fname.exists():
+                with fitsio.FITS(fname) as h:
+                    tbl = h[1].read()
+
+            # Unlike astropy tables you have to set these as a list to set every element
+            # to this value instead of just passing that value.
+            srvy_arr = [srvy] * len(tbl)
+            prgrm_arr = [prgrm] * len(tbl)
+            tbl = append_fields(tbl, ['SURVEY', 'PROGRAM'], [srvy_arr, prgrm_arr], usemask=False)
+            tbls.append(tbl)
+
+    return np.concatenate(tbls)
