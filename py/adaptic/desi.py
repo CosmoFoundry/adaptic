@@ -323,7 +323,7 @@ class DESIDataset(IterableDataset):
             Modifies self.summary in-place. Should be called only by DESIDataset constructor.
         """
         # Confirm either HEALPIX or TILEID
-        if 'HEALPIX' in self.summary.dtype.names:
+        if ('HEALPIX' in self.summary.dtype.names) or ('UNIQPIX' in self.summary.dtype.names):
             for col in ('SURVEY', 'PROGRAM'):
                 assert col in self.summary.dtype.names, f'{col} missing from HEALPIX-based summary table'
         elif 'TILEID' in self.summary.dtype.names:
