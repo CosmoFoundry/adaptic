@@ -638,7 +638,7 @@ def find_and_concat_uniqpix_tables(specprod_dir, ignore_survey=None, ignore_prog
             Defaults to None, which doesn't ignore anything.
 
         ignore_program : list of str, optional
-            A list of prorgam strings to ignore when loading the uniqpix tables.
+            A list of program strings to ignore when loading the uniqpix tables.
             Possible values are any subset of ['backup', 'bright', 'dark', 'other'].
             Defaults to None, which doesn't ignore anything.
 
