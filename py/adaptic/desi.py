@@ -668,10 +668,11 @@ def find_and_concat_uniqpix_tables(specprod_dir, ignore_survey=None, ignore_prog
             if prgrm in ignore_program: continue
 
             fname = prgrm_path / f"uniqpix-{srvy}-{prgrm}.fits"
-            # If it doesn't exist something is wrong but catch it anyway.
-            if fname.exists():
-                with fitsio.FITS(fname) as h:
-                    tbl = h[1].read()
+            # If it doesn't exist, skip this (survey, program) combination.
+            if not fname.exists():
+                continue
+            with fitsio.FITS(fname) as h:
+                tbl = h[1].read()
 
             # Unlike astropy tables you have to set these as a list to set every element
             # to this value instead of just passing that value.
