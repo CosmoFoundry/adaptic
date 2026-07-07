@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **adaptic** is a lightweight Python package providing PyTorch wrappers for cosmology datasets, currently focused on DESI (Dark Energy Spectroscopic Instrument) spectroscopic data. The package is designed to be usable by copy-pasting individual module files into projects.
 
-Future development will include wrappres for Legacy Survey imaging and HATS catalogs, following a similar design philosophy.
+Future development will include wrappers for Legacy Survey imaging and HATS catalogs, following a similar design philosophy.
 
 ## Commands
 
