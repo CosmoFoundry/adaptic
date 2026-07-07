@@ -1,4 +1,5 @@
 import string
+from pathlib import Path
 
 import fitsio
 import numpy as np
@@ -101,3 +102,45 @@ def random_desi_coadd(path, coadd_name, num_spec, rng, redshift_name=None, targe
             redshifts["TARGETID"] = fmap["TARGETID"]
             h.write(redshifts, extname="REDSHIFTS")
             # We don't need any of the other HDUs in the redshifts file.
+
+uniqpix_summary_dtype = np.dtype([('UNIQPIX', '>i8'), ('NTARGETS', '>i4')])
+
+def make_uniqpix_table(specprod_dir, survey, program, uniqpix_values, ntargets_values):
+    """
+        Write a minimal ``uniqpix-{survey}-{program}.fits`` summary file under
+        ``{specprod_dir}/spectra/{survey}/{program}/``, suitable for use as
+        input to :func:`~adaptic.desi.find_and_concat_uniqpix_tables`.
+
+        Parameters
+        ----------
+        specprod_dir : str or :class:`~pathlib.Path`
+            The base directory of the spectroscopic production.  The file is
+            written to ``{specprod_dir}/spectra/{survey}/{program}/``; any
+            missing directories are created automatically.
+
+        survey : str
+            Survey identifier (e.g. ``'main'``, ``'sv1'``).
+
+        program : str
+            Program identifier (e.g. ``'dark'``, ``'bright'``).
+
+        uniqpix_values : array-like of int
+            UNIQPIX pixel indices to store in the table.
+
+        ntargets_values : array-like of int
+            Number of targets per pixel, parallel to ``uniqpix_values``.
+
+        Returns
+        -------
+        :class:`~pathlib.Path`
+            Absolute path to the written FITS file.
+    """
+    dirpath = Path(specprod_dir) / "spectra" / survey / program
+    dirpath.mkdir(parents=True, exist_ok=True)
+    fname = dirpath / f"uniqpix-{survey}-{program}.fits"
+    tbl = np.empty(len(uniqpix_values), dtype=uniqpix_summary_dtype)
+    tbl['UNIQPIX'] = uniqpix_values
+    tbl['NTARGETS'] = ntargets_values
+    with fitsio.FITS(fname, 'rw') as h:
+        h.write(tbl)
+    return fname
