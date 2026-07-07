@@ -681,4 +681,6 @@ def find_and_concat_uniqpix_tables(specprod_dir, ignore_survey=None, ignore_prog
             tbl = append_fields(tbl, ['SURVEY', 'PROGRAM'], [srvy_arr, prgrm_arr], usemask=False)
             tbls.append(tbl)
 
+    if len(tbls) == 0:
+        raise ValueError(f"No uniqpix summary tables found under {spec_path} (after applying ignore_* filters).")
     return np.concatenate(tbls)
