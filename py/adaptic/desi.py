@@ -327,7 +327,7 @@ class DESIDataset(IterableDataset):
         # Confirm either HEALPIX or TILEID
         if is_pix_based:
             for col in ('SURVEY', 'PROGRAM'):
-                assert col in self.summary.dtype.names, f"{col} missing from HEALPIX-based summary table"
+                assert col in self.summary.dtype.names, f"{col} missing from pixel-based (HEALPIX/UNIQPIX) summary table"
             if ('HEALPIX' in self.summary.dtype.names) and ('UNIQPIX' in self.summary.dtype.names):
                 raise ValueError("Should only have either HEALPIX or UNIQPIX, not both")
 
