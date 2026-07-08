@@ -1,7 +1,7 @@
 import os
 import fitsio
 import numpy as np
-from numpy.lib.recfunctions import merge_arrays, append_fields # To join the fibermap and redshifts headers
+from numpy.lib.recfunctions import merge_arrays, append_fields, rename_fields
 from torch.utils.data import IterableDataset, get_worker_info
 
 import hashlib
@@ -55,8 +55,8 @@ class DESIDataset(IterableDataset):
             specprod_dir : str or :class:`~pathlib.Path`
                 The base directory of the spectroscopic production. Can be in any location,
                 as long as the specprod follows main DESI data release conventions.
-                That is, the healpix coadded spectra are stored in
-                {specprod_dir}/healpix/{survey}/{program}/{healpix // 100}/{healpix}
+                For example, healpix coadded spectra are stored in
+                {specprod_dir}/healpix/{survey}/{program}/{healpix // 100}/{healpix}.
 
             summary_table : :class:`~numpy.array` or :class:`~astropy.table.Table`, optional
                 A numpy record array, or alternatively, an astropy table if
@@ -322,28 +322,38 @@ class DESIDataset(IterableDataset):
             Auto detect tiles-based vs. healpix-based summary table and update columns as needed.
             Modifies self.summary in-place. Should be called only by DESIDataset constructor.
         """
+        is_pix_based = ('HEALPIX' in self.summary.dtype.names) or ('UNIQPIX' in self.summary.dtype.names)
+
         # Confirm either HEALPIX or TILEID
-        if 'HEALPIX' in self.summary.dtype.names:
+        if is_pix_based:
             for col in ('SURVEY', 'PROGRAM'):
-                assert col in self.summary.dtype.names, f'{col} missing from HEALPIX-based summary table'
+                assert col in self.summary.dtype.names, f"{col} missing from pixel-based (HEALPIX/UNIQPIX) summary table"
+            if ('HEALPIX' in self.summary.dtype.names) and ('UNIQPIX' in self.summary.dtype.names):
+                raise ValueError("Should only have either HEALPIX or UNIQPIX, not both")
+
         elif 'TILEID' in self.summary.dtype.names:
             for col in ('LASTNIGHT',):
-                assert col in self.summary.dtype.names, f'{col} missing from TILEID-based summary table'
+                assert col in self.summary.dtype.names, f"{col} missing from TILEID-based summary table"
         else:
             raise ValueError(f"summary must have HEALPIX,SURVEY,PROGRAM or TILEID,LASTNIGHT columns; found {self.summary.dtype.names}")
 
-        # Trim to unique SURVEY, PROGRAM, HEALPIX if needed;
+        # Trim to unique SURVEY, PROGRAM, PIX if needed;
         # tilepix.fits files map tiles:healpix and have multiple entries per healpix
         # Note: this section can be removed if we standardize on a different healpix summary
         #       file for each production
-        if 'HEALPIX' in self.summary.dtype.names:
-            ii = np.unique(self.summary[['SURVEY', 'PROGRAM', 'HEALPIX']], return_index=True)[1]
+        if is_pix_based:
+            pix_key = "HEALPIX" if 'HEALPIX' in self.summary.dtype.names else "UNIQPIX"
+            ii = np.unique(self.summary[['SURVEY', 'PROGRAM', pix_key]], return_index=True)[1]
             self.summary = self.summary[ii]
 
         # Add default NUMTARGETS if needed; load-balancing may be off, but at least don't crash
         if 'NUMTARGETS' not in self.summary.dtype.names:
-            numtargets = 500*np.ones(len(self.summary))
-            self.summary = append_fields(self.summary, 'NUMTARGETS', numtargets, usemask=False)
+            # UNIQPIX might use NTARGETS instead of NUMTARGETS
+            if 'NTARGETS' in self.summary.dtype.names:
+                self.summary = rename_fields(self.summary, {'NTARGETS': 'NUMTARGETS'})
+            else:
+                numtargets = 500*np.ones(len(self.summary))
+                self.summary = append_fields(self.summary, 'NUMTARGETS', numtargets, usemask=False)
 
         # promote bytestring SURVEY, PROGRAM columns to unicode columns
         description = self.summary.dtype.descr
@@ -358,7 +368,7 @@ class DESIDataset(IterableDataset):
 
         # if tiles-based (not healpix), expand to one row per PETAL and add NUMTARGETS=500 column
         if (('TILEID' in self.summary.dtype.names) and
-            ('HEALPIX' not in self.summary.dtype.names) and
+            not is_pix_based and
             ('PETAL' not in self.summary.dtype.names)
             ):
             summary = np.repeat(self.summary, 10)
@@ -382,14 +392,20 @@ class DESIDataset(IterableDataset):
                 List of determined path names. The first element is the coadd
                 path and the second is the redrock path.
         """
-        if 'HEALPIX' in row.dtype.names:
-            hpx = row['HEALPIX']
+        if ('HEALPIX' in row.dtype.names) or ('UNIQPIX' in row.dtype.names):
+            pix_key = 'HEALPIX' if ('HEALPIX' in row.dtype.names) else 'UNIQPIX'
+            pix = row[pix_key]
             srvy = row['SURVEY']
             prgrm = row['PROGRAM']
-            fname = self.base_dir / "healpix" / srvy / prgrm
-            fname = fname / str(hpx // 100) / str(hpx)
-            coaddname = fname / f"coadd-{srvy}-{prgrm}-{hpx}.fits"
-            rrname = fname / f"redrock-{srvy}-{prgrm}-{hpx}.fits"
+
+            if ('HEALPIX' in row.dtype.names):
+                fname = self.base_dir / "healpix" / srvy / prgrm
+            else:
+                fname = self.base_dir / "spectra" / srvy / prgrm
+
+            fname = fname / str(pix // 100) / str(pix)
+            coaddname = fname / f"coadd-{srvy}-{prgrm}-{pix}.fits"
+            rrname = fname / f"redrock-{srvy}-{prgrm}-{pix}.fits"
         elif 'TILEID' in row.dtype.names:
             tileid = row['TILEID']
             night = row['LASTNIGHT']
@@ -602,3 +618,69 @@ class DESIDataset(IterableDataset):
                            train_frac=self.train_frac, train_data=self.is_train,
                            coadd_spectra=self.coadd_spectra, filter_func=self.filter_func,
                            autoloop=self.autoloop, return_cols=self._return_cols)
+
+def find_and_concat_uniqpix_tables(specprod_dir, ignore_survey=None, ignore_program=None):
+    """
+        Finds all `uniqpix-{survey}-{program}.fits` tables and concatenates them.
+        Provides some ability to ignore some program/surveys.
+
+        Parameters
+        ----------
+        specprod_dir : str or :class:`~pathlib.Path`
+            The base directory of the spectroscopic production. Can be in any location,
+            as long as the specprod follows main DESI data release conventions.
+            That is, the uniqpix coadded spectra are stored in
+            {specprod_dir}/spectra/{survey}/{program}/{uniqpix // 100}/{uniqpix}
+
+        ignore_survey : list of str, optional
+            A list of survey strings to ignore when loading the uniqpix tables.
+            Possible values are any subset of ['cmx', 'main', 'special', 'sv1', 'sv2', 'sv3'].
+            Defaults to None, which doesn't ignore anything.
+
+        ignore_program : list of str, optional
+            A list of program strings to ignore when loading the uniqpix tables.
+            Possible values are any subset of ['backup', 'bright', 'dark', 'other'].
+            Defaults to None, which doesn't ignore anything.
+
+        Returns
+        -------
+        :class:`~numpy.array`
+            A numpy record array with the requisite columns (['UNIQPIX',
+            'SURVEY', 'PROGRAM', 'NTARGETS']) to instantiate a
+            DESIDataset object that loads uniqpix coadded spectra.
+
+    """
+    tbls = []
+    spec_path = Path(specprod_dir) / "spectra"
+    if not spec_path.exists():
+        raise ValueError("No UNIQPIX coadds found for this specprod.")
+
+    if ignore_program is None:
+        ignore_program = []
+    if ignore_survey is None:
+        ignore_survey = []
+
+    for srvy_path in spec_path.glob("*"):
+        srvy = srvy_path.name
+        if srvy in ignore_survey: continue
+        for prgrm_path in srvy_path.glob("*"):
+            prgrm = prgrm_path.name
+            if prgrm in ignore_program: continue
+
+            fname = prgrm_path / f"uniqpix-{srvy}-{prgrm}.fits"
+            # If it doesn't exist, skip this (survey, program) combination.
+            if not fname.exists():
+                continue
+            with fitsio.FITS(fname) as h:
+                tbl = h[1].read()
+
+            # Unlike astropy tables you have to set these as a list to set every element
+            # to this value instead of just passing that value.
+            srvy_arr = [srvy] * len(tbl)
+            prgrm_arr = [prgrm] * len(tbl)
+            tbl = append_fields(tbl, ['SURVEY', 'PROGRAM'], [srvy_arr, prgrm_arr], usemask=False)
+            tbls.append(tbl)
+
+    if len(tbls) == 0:
+        raise ValueError(f"No uniqpix summary tables found under {spec_path} (after applying ignore_* filters).")
+    return np.concatenate(tbls)
