@@ -708,7 +708,7 @@ def autodiscover_summary_table(specprod_dir, coadd_type):
             or healpix based summary table. For healpix, this function will
             auto determine if the specprod divides spectra
             by UNIQPIX or HEALPIX, preferring UNIQPIX.
-            Options are "TILE" or "HEALPIX". Will
+            Options are "TILE" or "HEALPIX" (case agnostic). Will
             raise a value error if the input is not one of these options.
 
         Returns
@@ -718,7 +718,7 @@ def autodiscover_summary_table(specprod_dir, coadd_type):
             DESIDataset object that loads the requested coadd type spectra.
     """
     base = Path(specprod_dir)
-    if coadd_type == "HEALPIX":
+    if coadd_type.upper() == "HEALPIX":
         if (base / "spectra").exists(): # This is UNIQPIX based specprod
             return find_and_concat_uniqpix_tables(specprod_dir)
         elif (base / "healpix" / "tilepix.fits").exists(): # This is HEALPIX based specprod
@@ -726,7 +726,7 @@ def autodiscover_summary_table(specprod_dir, coadd_type):
                 return h[1].read()
         else: # panic
             raise ValueError("Neither spectra nor healpix dirs found in this specprod, but coadd_type=HEALPIX requested.")
-    elif coadd_type == "TILE":
+    elif coadd_type.upper() == "TILE":
         specprod = base.name
         if (base / f"tiles-{specprod}.fits").exists(): # This is HEALPIX based specprod
             with fitsio.FITS(base / f"tiles-{specprod}.fits") as h:
