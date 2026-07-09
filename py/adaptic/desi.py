@@ -67,7 +67,8 @@ class DESIDataset(IterableDataset):
                 columns that will be ignored. Optional, if not passed the Dataset
                 will attempt to auto-discover the necessary file in the given `specprod_dir`m
                 using `coadd_type` to determine which type to autodiscover.
-                If passed, override any auto-discovery.
+                If passed, override any auto-discovery. See :func:`autodiscover_summary_table`
+                for more details on summary_table autodiscovery.
 
             seed : int, optional
                 Seed to use for any randomness. Randomness is done through a
@@ -142,7 +143,7 @@ class DESIDataset(IterableDataset):
                 determines if the DESIDataset should look for tile based
                 or healpix based. For healpix based dataset the
                 dataset will auto determine if the specprod divides spectra
-                by UNIQPIX or HEALPIX. Options are "TILE" or "HEALPIX". Will
+                by UNIQPIX or HEALPIX. Options are "TILE" or "HEALPIX" (case agnostic). Will
                 raise a value error if the input is not one of these options.
                 Defaults to None, which means nothing.
         """
