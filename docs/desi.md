@@ -20,9 +20,13 @@ In this document we will first document a few useful object parameters before pr
 ## Picking Data to Load
 The `DESIDataset` has a variety of optional arguments, but two *required* arguments: `specprod_dir` and `summary_table`. These two arguments tell the dataset where to load data from, and what data to load, respectively.
 
-The `specprod_dir` can be any directory, so long as the data is stored according to the desi data model. `DESIDataset` currently only supports healpix based coadded spectra, so expects all data to live in directories of the form `{specprod_dir}/healpix/{survey}/{program}/{healpix // 100}/{healpix}`.
+The `specprod_dir` can be any directory, so long as the data is stored according to the desi data model.
 
-The `summary_table` should be a numpy rec array (or optionally, for the astronomy familiar users, an astropy table) that provides the columns `["SURVEY", "PROGRAM", "HEALPIX", "NSIDE", "NUMTARGETS"]`. Each file to be loaded should correspond to a single row in the summary_table. The necessary columns (`"SURVEY", "PROGRAM", "HEALPIX"`) are used to generate file paths to each spectra file, while `"NUMTARGETS"` is used to balance the worker loads when running with more than 1 parallel worker for loading.
+For healpix based coadds, `DESIDataset` currently expects all data to live in directories of the form `{specprod_dir}/healpix/{survey}/{program}/{healpix // 100}/{healpix}`.
+
+For tile based coadds, `DESIDataset` currently expects all data to live in directories of the form `{specprod_dir}/tiles/cumulative/{tileid}/{night}`.
+
+The `summary_table` should be a numpy rec array (or optionally, for the astronomy familiar users, an astropy table) that provides the columns, for healpix coadds, `["SURVEY", "PROGRAM", "HEALPIX"]`. Each file to be loaded should correspond to a single row in the summary_table. The necessary columns (`"SURVEY", "PROGRAM", "HEALPIX"`) are used to generate file paths to each spectra file. For tile based coadds  DESIDatset expects `["TILEID", "LASTNIGHT", "PETAL"]`. If provided, a `"NUMTARGETS"` is used to balance the worker loads when running with more than 1 parallel worker for loading.
 
 **Note:** The `summary_table` does not need to contain *every* spectra file in the `specprod_dir`, and the `DESIDataset` will only load files represented by a row in the `summary_table`. The end user can preemptively subselect while files to load by trimming out the corresponding rows of the `summary_table`. For example, one could use only main survey spectra by generating a summary table with only the rows where `tbl[SURVEY] == main`.
 
@@ -36,7 +40,7 @@ The `DESIDataset` provides two arguments that control the training/validation sp
 
 Broadly the internal logic of the `DESIDataset` is:
 - If `train_frac` is not provided, return all spectra in every file
-- If  `train_frac` is passed, randomly subdivide each file upon load and designate `train_frac` of the spectra as training spectra and the remainder as validation. If `train_data` is True, return the training selection, if not then return the validation selection.
+- If `train_frac` **is** passed, randomly subdivide each file upon load and designate `train_frac` of the spectra as training spectra and the remainder as validation. If `train_data` is True, return the training selection, if not then return the validation selection.
 
 **Note:** In order to avoid duplicating spectra between the training and validation sets, make sure you initialize the training and validation `DESIDataset`s with the exact same parameters, especially the `train_frac` and `seed` values. For example:
 ```python
@@ -45,6 +49,11 @@ data_table = {table here}
 train_frac = 0.7
 dataset_train = DESIDataset(specprod_dir=specprod_dir, summary_table=data_table, seed=91701, train_frac=train_frac, train_data=True)
 dataset_valid = DESIDataset(specprod_dir=specprod_dir, summary_table=data_table, seed=91701, train_frac=train_frac, train_data=False)
+
+# or, alternatively,
+# dataset_valid = dataset_train.copy()
+# dataset_vaid.set_validation()
+
 ```
 
 The DESIDataset also supports copying, an alternative and safer pattern to declare a training and validation dataset is to do
@@ -135,7 +144,9 @@ import fitsio
 from adaptic.desi import DESIDataset
 
 specprod_dir = "/global/cfs/cdirs/desi/public/dr1/spectro/redux/iron/"
-summary_file = "/global/cfs/cdirs/desi/public/dr1/spectro/redux/iron/healpix-iron.fits"
+summary_file = "/global/cfs/cdirs/desi/public/dr1/spectro/redux/iron/healpix/tilepix.fits"
+# Or for tile based coadds:
+# summary_file = "/global/cfs/cdirs/desi/public/dr1/spectro/redux/iron/tiles-iron.fits
 with fitsio.FITS(summary_file) as h:
     summary_table = h[1].read()
 
