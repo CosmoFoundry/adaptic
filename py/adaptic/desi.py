@@ -6,7 +6,6 @@ from torch.utils.data import IterableDataset, get_worker_info
 
 import hashlib
 from pathlib import Path
-from copy import deepcopy
 
 class DESIDataset(IterableDataset):
     # class-level tuple of default columns to return
@@ -46,7 +45,7 @@ class DESIDataset(IterableDataset):
     def __init__(self, specprod_dir, summary_table=None, seed=123, shuffle_files=True,
                  transform=None, normalize=False, train_frac=None, train_data=True,
                  coadd_spectra=True, filter_func=None, autoloop=False,
-                 extra_cols=None, return_cols=None):
+                 extra_cols=None, return_cols=None, coadd_type=None):
         """
             Initialize the dataset object.
 
@@ -66,8 +65,10 @@ class DESIDataset(IterableDataset):
                 coadds, it must include at minimum the columns ["TILEID", "LASTNIGHT"].
                 In both cases the table is allowed to contain additional
                 columns that will be ignored. Optional, if not passed the Dataset
-                will attempt to auto-discover the necessary file in the given `specprod_dir`.
-                If passed, override any auto-discovery.
+                will attempt to auto-discover the necessary file in the given `specprod_dir`m
+                using `coadd_type` to determine which type to autodiscover.
+                If passed, override any auto-discovery. See :func:`autodiscover_summary_table`
+                for more details on summary_table autodiscovery.
 
             seed : int, optional
                 Seed to use for any randomness. Randomness is done through a
@@ -136,20 +137,24 @@ class DESIDataset(IterableDataset):
                 replacing the default set entirely. Adaptic determines automatically
                 whether each column comes from FIBERMAP or REDSHIFTS. Cannot be
                 used together with extra_cols.
+
+            coadd_type : str, optional
+                If attempting to auto discover the summary table, `coadd_type`
+                determines if the DESIDataset should look for tile based
+                or healpix based. For healpix based dataset the
+                dataset will auto determine if the specprod divides spectra
+                by UNIQPIX or HEALPIX. Options are "TILE" or "HEALPIX" (case agnostic). Will
+                raise a value error if the input is not one of these options.
+                Defaults to None, which means nothing.
         """
         super(DESIDataset).__init__()
         self.base_dir = Path(specprod_dir)
 
         if summary_table is not None:
-            self.summary = deepcopy(np.asarray(summary_table)) # Don't want to mutate the input
+            self.summary = np.asarray(summary_table, copy=True) # Don't want to mutate the input
         else:
-            # Try auto discover a healpix summary file.
-            specprod = self.base_dir.name
-            summary_loc = self.base_dir / f"healpix-{specprod}.fits"
-            assert summary_loc.exists(), f"attempted auto discovery of {summary_loc}, but file not found!"
-
-            with fitsio.FITS(summary_loc) as h:
-                self.summary = h[1].read()
+            # Try auto discover a summary file.
+            self.summary = autodiscover_summary_table(specprod_dir=specprod_dir, coadd_type=coadd_type)
 
         self.seed = seed
         self.rng = np.random.default_rng(seed)
@@ -684,3 +689,49 @@ def find_and_concat_uniqpix_tables(specprod_dir, ignore_survey=None, ignore_prog
     if len(tbls) == 0:
         raise ValueError(f"No uniqpix summary tables found under {spec_path} (after applying ignore_* filters).")
     return np.concatenate(tbls)
+
+def autodiscover_summary_table(specprod_dir, coadd_type):
+    """
+        Autodiscover the requested summary table in the given specprod directory.
+
+        Parameters
+        ----------
+        specprod_dir : str or :class:`~pathlib.Path`
+            The base directory of the spectroscopic production. Can be in any location,
+            as long as the specprod follows main DESI data release conventions.
+            For example, healpix coadded spectra are stored in
+            {specprod_dir}/healpix/{survey}/{program}/{healpix // 100}/{healpix}.
+            For tile based coadds, the specprod name is assumed to be `specprod_dir.name()`,
+            that is, the lowest folder name.
+
+        coadd_type : str
+            `coadd_type` determines if this function should look for the tile based
+            or healpix based summary table. For healpix, this function will
+            auto determine if the specprod divides spectra
+            by UNIQPIX or HEALPIX, preferring UNIQPIX.
+            Options are "TILE" or "HEALPIX" (case agnostic). Will
+            raise a value error if the input is not one of these options.
+
+        Returns
+        -------
+        :class:`~numpy.array`
+            A numpy record array with the requisite columns to instantiate a
+            DESIDataset object that loads the requested coadd type spectra.
+    """
+    base = Path(specprod_dir)
+    if coadd_type.upper() == "HEALPIX":
+        if (base / "spectra").exists(): # This is UNIQPIX based specprod
+            return find_and_concat_uniqpix_tables(specprod_dir)
+        elif (base / "healpix" / "tilepix.fits").exists(): # This is HEALPIX based specprod
+            with fitsio.FITS(base / "healpix" / "tilepix.fits") as h:
+                return h[1].read()
+        else: # panic
+            raise FileNotFoundError("Neither spectra nor healpix dirs found in this specprod, but coadd_type=HEALPIX requested.")
+    elif coadd_type.upper() == "TILE":
+        specprod = base.name
+        if (base / f"tiles-{specprod}.fits").exists(): # This is HEALPIX based specprod
+            with fitsio.FITS(base / f"tiles-{specprod}.fits") as h:
+                return h[1].read()
+        raise FileNotFoundError(f"tiles-{specprod}.fits file not found, but coadd_type=TILE requested.")
+    else:
+        raise ValueError(f"Only HEALPIX or TILE coadds allowed, but requested {coadd_type=}")
