@@ -65,7 +65,7 @@ class DESIDataset(IterableDataset):
                 coadds, it must include at minimum the columns ["TILEID", "LASTNIGHT"].
                 In both cases the table is allowed to contain additional
                 columns that will be ignored. Optional, if not passed the Dataset
-                will attempt to auto-discover the necessary file in the given `specprod_dir`m
+                will attempt to auto-discover the necessary file in the given `specprod_dir`
                 using `coadd_type` to determine which type to autodiscover.
                 If passed, override any auto-discovery. See :func:`autodiscover_summary_table`
                 for more details on summary_table autodiscovery.
