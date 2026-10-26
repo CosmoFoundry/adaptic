@@ -143,9 +143,9 @@ class DESIDataset(IterableDataset):
                 determines if the DESIDataset should look for tile based
                 or healpix based. For healpix based dataset the
                 dataset will auto determine if the specprod divides spectra
-                by UNIQPIX or HEALPIX. Options are "TILE" or "HEALPIX" (case agnostic). Will
-                raise a value error if the input is not one of these options.
-                Defaults to None, which means nothing.
+                by UNIQPIX or HEALPIX. Options are "TILE" or "HEALPIX" (case agnostic).
+                Raises a ValueError if the input is not one of these options. Required
+                when `summary_table` is not passed.
         """
         super(DESIDataset).__init__()
         self.base_dir = Path(specprod_dir)
