@@ -154,6 +154,8 @@ class DESIDataset(IterableDataset):
             self.summary = np.array(summary_table, copy=True) # Don't want to mutate the input
         else:
             # Try auto discover a summary file.
+            if coadd_type is None:
+                raise ValueError("coadd_type must be 'TILE' or 'HEALPIX' when summary_table is not passed.")
             self.summary = autodiscover_summary_table(specprod_dir=specprod_dir, coadd_type=coadd_type)
 
         self.seed = seed
