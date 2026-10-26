@@ -701,7 +701,7 @@ def autodiscover_summary_table(specprod_dir, coadd_type):
             as long as the specprod follows main DESI data release conventions.
             For example, healpix coadded spectra are stored in
             {specprod_dir}/healpix/{survey}/{program}/{healpix // 100}/{healpix}.
-            For tile based coadds, the specprod name is assumed to be `specprod_dir.name()`,
+            For tile based coadds, the specprod name is assumed to be `specprod_dir.name`,
             that is, the lowest folder name.
 
         coadd_type : str
