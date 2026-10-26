@@ -151,7 +151,7 @@ class DESIDataset(IterableDataset):
         self.base_dir = Path(specprod_dir)
 
         if summary_table is not None:
-            self.summary = np.asarray(summary_table, copy=True) # Don't want to mutate the input
+            self.summary = np.array(summary_table, copy=True) # Don't want to mutate the input
         else:
             # Try auto discover a summary file.
             self.summary = autodiscover_summary_table(specprod_dir=specprod_dir, coadd_type=coadd_type)
