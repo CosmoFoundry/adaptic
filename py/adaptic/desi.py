@@ -728,7 +728,7 @@ def autodiscover_summary_table(specprod_dir, coadd_type):
             with fitsio.FITS(base / "healpix" / "tilepix.fits") as h:
                 return h[1].read()
         else: # panic
-            raise FileNotFoundError("Neither spectra nor healpix dirs found in this specprod, but coadd_type=HEALPIX requested.")
+            raise FileNotFoundError("Neither spectra/ nor healpix/tilepix.fits found in this specprod, but coadd_type=HEALPIX requested.")
     elif coadd_type.upper() == "TILE":
         specprod = base.name
         if (base / f"tiles-{specprod}.fits").exists(): # This is TILE based specprod
