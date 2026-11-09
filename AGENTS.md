@@ -24,7 +24,7 @@ pytest py/adaptic/test/test_desi.py
 pytest py/adaptic/test/test_desi.py::TestDESI::test_healpix
 ```
 
-There are no separate lint/format commands configured; CI runs only pytest.
+There are no separate lint/format commands configured; CI runs only pytest. CI (`.github/workflows/test.yaml`) runs bare `pytest` from the repo root on Python 3.12, 3.13, and 3.14.
 
 ## Architecture
 
@@ -33,11 +33,11 @@ There are no separate lint/format commands configured; CI runs only pytest.
 ```
 py/adaptic/          # Main package (installed from py/ subdirectory)
 ├── desi.py          # Primary module: DESIDataset and all DESI-specific logic
-├── data/            # Package data files
 └── test/
-    ├── test_desi.py # unittest-based tests, run via pytest
+    ├── test_desi.py    # unittest-based tests, run via pytest
     ├── test_uniqpix.py # unittest-based tests, run via pytest
-    └── util.py      # Synthetic FITS file generators for tests (no real DESI data needed)
+    ├── util.py         # Synthetic FITS file generators for tests (no real DESI data needed)
+    └── data/           # Small FITS fixtures checked into the repo (summary tables)
 ```
 
 ### Core class: `DESIDataset`
@@ -49,6 +49,15 @@ py/adaptic/          # Main package (installed from py/ subdirectory)
 - **UniqPix**: `spectra/{survey}/{program}/{uniqpix//100}/{uniqpix}/`
 
 Each layout reads paired FITS files: coadded spectra (`coadd-*.fits`) and redshift catalogs (`redrock-*.fits` or equivalent). The dataset optionally coadds B/R/Z camera spectra using inverse-variance weighting and returns dictionaries with `FLUX`, `IVAR`, `MASK` arrays and metadata columns.
+
+### Summary tables and auto-discovery
+
+`DESIDataset` needs a summary table enumerating the groups to load, supplied via `summary_table=`. Alternatively, pass `coadd_type="HEALPIX"` or `"TILE"` and it auto-discovers the table via `autodiscover_summary_table` (desi.py):
+
+- HEALPIX: prefers a UniqPix specprod (`spectra/` dir → concatenates all `uniqpix-{survey}-{program}.fits` via `find_and_concat_uniqpix_tables`), else falls back to `healpix/tilepix.fits`
+- TILE: expects `tiles-{specprod}.fits` at the specprod root, where `specprod` is the lowest directory name
+
+An explicit `summary_table` overrides auto-discovery.
 
 Key design decisions:
 - Worker load balancing: healpix/tile groups are distributed across DataLoader workers deterministically
